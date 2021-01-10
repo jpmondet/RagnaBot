@@ -267,7 +267,7 @@ For example : !submit https://image-or-video-proof.rocks Vodka Korpiklaani Vred 
         "map_name": map_name,
         "band": band,
         "mapper": mapper,
-        "difficulty": difficulty
+        "difficulty": difficulty,
         "player_name": player_name,
         "player_discord_id": ctx.author.id,
         "player_discord_name": ctx.author.name,
@@ -383,7 +383,7 @@ async def valid(ctx, id_pending: int = 0):
     new_rank: int = -1
     old_score: int = -1
     for rank, ld_score in enumerate(map_ld):
-        if ld_score['name'] == valid_score['player_name']:
+        if ld_score['player_name'] == valid_score['player_name']:
             if int(ld_score['score']) > int(valid_score['score']):
                 await ctx.send(f"The player {valid_score['player_name']} has already a better score than the one submitted on {full_name}")
                 return
@@ -397,7 +397,7 @@ async def valid(ctx, id_pending: int = 0):
 
     print("New score placement (-1 if there isnt'):", new_rank)
     if new_rank > -1:
-        map_ld[new_rank] = valid_score
+        map_ld.insert(new_rank,valid_score)
     else:
         map_ld.append(valid_score)
 
@@ -434,7 +434,7 @@ async def valid(ctx, id_pending: int = 0):
     #with open(PLAYERS_DETAILS, 'w') as pfile:
     #    json.dump(players_details, pfile)
 
-    print("Deleting pending {pendings[id_pending-1]}")
+    print(f"Deleting pending {pendings[id_pending-1]}")
     # Remove score from pendings
     del(pendings[id_pending-1])
     with open(PENDING_SCORES, 'w') as pfile:
