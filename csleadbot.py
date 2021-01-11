@@ -21,6 +21,7 @@ ROLE_ADMIN: str = os.getenv('ROLE_ADMIN')
 CUSTOM_SONGS: str = "custom_songs.json"
 PLAYERS_DETAILS: str = "players.json"
 PENDING_SCORES: str = "pending_scores.json"
+ACCOUNTS: str = "id_accounts_list.json"
 
 # UTILS (NON-BOT FUNCTIONS)
 
@@ -28,7 +29,7 @@ def load_accounts():
     """ Loads registered discord ids accs from files and return the associated dict """
     id_accounts: Dict[str, str] = {}
 
-    with open('id_accounts_list', 'r') as facc:
+    with open(ACCOUNTS, 'r') as facc:
         id_accounts = json.load(facc)
     
     return id_accounts
@@ -117,9 +118,9 @@ async def top_map(ctx, map_name: str = "", nb_to_show: int = 10):
             matching_songs.append(cs)
 
     print("Found matching songs:", matching_songs)
-    names_songs = ', '.join([cs['full_name'] for cs in matching_songs])
-    match_str: str= f"Your request matched those songs : {names_songs}. \n \
-            Here are the associated leaderboards : \n\n"
+    names_songs =  ',\n\t'.join([cs['full_name'] for cs in matching_songs])
+    match_str: str= f"Your request matched these songs :\n\t{names_songs}. \n \
+\nHere are the associated leaderboards : \n\n"
     print(match_str)
 
     leaders: str = ""
@@ -157,7 +158,7 @@ If you wanna unregister, please use `!unregister YEAHIMSURE!` (but your scores w
 
     id_accounts[ctx.author.id] = player_name
 
-    with open('id_accounts_list', 'w') as facc:
+    with open(ACCOUNTS, 'w') as facc:
         json.dump(id_accounts, facc)
 
     # Must also add the player to the players db
@@ -185,21 +186,134 @@ If you wanna unregister, please use `!unregister YEAHIMSURE!` (but your scores w
         msg_to_send = ''.join(message)
         await ctx.send(msg_to_send)
 
-@bot.command(name='unregister', help='Unregister from everything (including your previous scores)')
+@bot.command(name='unregister', help='Unregister from everything (including your previous scores\n \
+If you wanna unregister, please use `!unregister YEAHIMSURE!` (but your scores will be deleted as well, be careful ! ^^)')
 @commands.before_invoke(record_usage)
 async def unregister(ctx, confirm: str = ""):
 
-    for message in paginate("Not Implemented Yet"):
+    if confirm != "YEAHIMSURE!":
+        await ctx.send(f"{ctx.author.name} didn't confirm, cancelling")
+        return
+
+    authorid: str = str(ctx.author.id)
+    id_accounts: Dict[str,str] = load_accounts()
+    player_name: str = id_accounts.get(authorid)
+    print(authorid, player_name)
+    if not player_name:
+        await ctx.send('Player wasnt registered in the first place (or didnt find him xD )')
+        return
+
+    print(f"Performing unregister of {ctx.author.name}'s account: {player_name}")
+
+    # Deleting the player on custom songs's leaderboards
+    custom_songs: List[Dict[str, Any]] = []
+    with open(CUSTOM_SONGS) as csfile:
+        custom_songs = json.load(csfile)
+
+    for cs in custom_songs:
+        rank_to_del: int = -1
+        for rank, ldscore in enumerate(cs['leaderboard']):
+            if ldscore['player_name'] == player_name:
+                rank_to_del = rank
+        if rank_to_del > -1:
+            print(f"Oh, must delete the {rank_to_del}th element of {cs['full_name']} leaderboard")
+            del(cs['leaderboard'][rank_to_del])
+    print("Custom songs updated:", custom_songs)
+
+    with open(CUSTOM_SONGS, 'w') as csfile:
+        json.dump(custom_songs, csfile)
+
+    with open(PLAYERS_DETAILS) as csfile:
+        players_details = json.load(csfile)
+
+    player_to_del: int = -1
+    for pid, pdetails in enumerate(players_details):
+        if pdetails['name'] == player_name:
+            player_to_del = pid
+    if player_to_del > -1:
+        print(f"Oh, must delete the player at {player_to_del}th element")
+        del(players_details[player_to_del])
+    else:
+        print("Player already deleted o.0")
+
+    with open(PLAYERS_DETAILS, 'w') as csfile:
+        json.dump(players_details, csfile)
+
+    print("Players updated:", players_details)
+
+    print(id_accounts)
+    del(id_accounts[authorid])
+
+    print("Accounts updated :", id_accounts)
+    with open(ACCOUNTS, 'w') as facc:
+        json.dump(id_accounts, facc)
+    print("Accounts updated :", id_accounts)
+
+
+    for message in paginate(f"Byee, no more scores from {player_name} :'("):
         msg_to_send = ''.join(message)
         await ctx.send(msg_to_send)
+
 
 @bot.command(name='rename', help='Change your in-game name on all the leaderboards & stuff')
 @commands.before_invoke(record_usage)
 async def rename(ctx, new_name: str = ""):
 
-    for message in paginate("Not Implemented Yet"):
+    if not new_name:
+        await ctx.send(f'Please specify the new name (with quotes if there are spaces). \n \
+Exple: !rename "Awesome New Name"')
+        return
+
+    authorid: str = str(ctx.author.id)
+    id_accounts: Dict[str,str] = load_accounts()
+    player_name: str = id_accounts.get(authorid)
+    print(authorid, player_name)
+    if not player_name:
+        await ctx.send('Player isnt registered (or didnt find him xD ), thus cant rename')
+        return
+
+    print(f"Renaming {ctx.author.name}'s account: {player_name} to {new_name}")
+
+    # Renaming the player on custom songs's leaderboards
+    custom_songs: List[Dict[str, Any]] = []
+    with open(CUSTOM_SONGS) as csfile:
+        custom_songs = json.load(csfile)
+
+    for cs in custom_songs:
+        for rank, ldscore in enumerate(cs['leaderboard']):
+            if ldscore['player_name'] == player_name:
+                print(f"Found the score of the player {ldscore}")
+                ldscore['player_name'] = new_name
+
+    print("Custom songs updated:", custom_songs)
+
+    with open(CUSTOM_SONGS, 'w') as csfile:
+        json.dump(custom_songs, csfile)
+
+    with open(PLAYERS_DETAILS) as csfile:
+        players_details = json.load(csfile)
+
+    for pdetails in players_details:
+        if pdetails['name'] == player_name:
+            pdetails['name'] = new_name
+
+    with open(PLAYERS_DETAILS, 'w') as csfile:
+        json.dump(players_details, csfile)
+
+    print("Players updated:", players_details)
+
+    id_accounts[authorid] = new_name
+
+    print("Accounts updated :", id_accounts)
+    with open(ACCOUNTS, 'w') as facc:
+        json.dump(id_accounts, facc)
+    print("Accounts updated :", id_accounts)
+
+
+    for message in paginate(f"Byee {player_name} and welcome {new_name} :-)"):
         msg_to_send = ''.join(message)
         await ctx.send(msg_to_send)
+
 
 @bot.command(name='playerstats', help='Get overall stats of a player')
 @commands.before_invoke(record_usage)
@@ -216,9 +330,11 @@ async def list_maps(ctx):
     with open(CUSTOM_SONGS) as csfile:
         custom_songs = json.load(csfile)
 
-    all_maps: str = ""
 
-    for cs in custom_songs:
+    sorted_cs = sorted(custom_songs, key=lambda k: k['full_name'])
+
+    all_maps: str = ""
+    for cs in sorted_cs:
         all_maps += f"{cs['full_name']} \n"
 
     for message in paginate(all_maps):
@@ -358,7 +474,7 @@ async def valid(ctx, id_pending: int = 0):
     with open(CUSTOM_SONGS) as csfile:
         custom_songs = json.load(csfile)
 
-    full_name: str = f"{valid_score['map_name']} - {valid_score['band']} - {valid_score['mapper']} - Level {valid_score['difficulty']}"
+    full_name: str = f"{valid_score['band']} - {valid_score['map_name']} - {valid_score['mapper']} - Level {valid_score['difficulty']}"
     print("Map to find : ", full_name)
     song_to_update: Dict[str, Any] = {}
     id_song: int = 0
@@ -497,7 +613,7 @@ For example : !newmap "Genocidal Humanoidz" "System of a Down" Skeelie 9\n \
     with open(CUSTOM_SONGS) as csfile:
         custom_songs = json.load(csfile)
 
-    full_name: str = f"{map_name} - {band} - {mapper} - Level {difficulty}"
+    full_name: str = f"{band} - {map_name} - {mapper} - Level {difficulty}"
 
     higher_id: int = 0
     for cs in custom_songs:
