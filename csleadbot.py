@@ -200,7 +200,7 @@ async def unregister(ctx, confirm: str = ""):
     player_name: str = id_accounts.get(authorid)
     print(authorid, player_name)
     if not player_name:
-        await ctx.send('Player wasnt registered in the first place (or didnt find him xD )')
+        await ctx.send('Player isnt registered in the first place (or didnt find him xD )')
         return
 
     print(f"Performing unregister of {ctx.author.name}'s account: {player_name}")
