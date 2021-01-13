@@ -15,9 +15,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 TOKEN: str = os.getenv("DISCORD_TOKEN")
-GUILD: str = os.getenv('DISCORD_GUILD')
-CHANNEL: str = os.getenv('DISCORD_CHANNEL')
-ROLE_ADMIN: str = os.getenv('ROLE_ADMIN')
+GUILD: str = os.getenv('DISCORD_GUILD').split(',')
+CHANNEL: str = os.getenv('DISCORD_CHANNEL').split(',')
+ROLE_ADMIN: str = os.getenv('ROLE_ADMIN').split(',')
 
 CUSTOM_SONGS: str = "custom_songs.json"
 PLAYERS_DETAILS: str = "players.json"
@@ -58,7 +58,7 @@ bot = commands.Bot(command_prefix='!')
 
 @bot.check
 def check_channel(ctx):
-    if str(ctx.channel) == CHANNEL and str(ctx.guild) == GUILD:
+    if str(ctx.channel) in CHANNEL and str(ctx.guild) in GUILD:
         return True
     else:
         raise commands.errors.CheckFailure("channelerr")
@@ -414,7 +414,7 @@ For example : !submit https://image-or-video-proof.rocks Vodka Korpiklaani Vred 
 
 
 @bot.command(name='listplayers', help='List all players')
-@commands.has_role(ROLE_ADMIN)
+@commands.has_any_role(*ROLE_ADMIN)
 @commands.before_invoke(record_usage)
 async def list_players(ctx):
 
@@ -434,7 +434,7 @@ async def list_players(ctx):
         await ctx.send(msg_to_send)
 
 @bot.command(name='listpending', help='List pending scores')
-@commands.has_role(ROLE_ADMIN)
+@commands.has_any_role(*ROLE_ADMIN)
 @commands.before_invoke(record_usage)
 async def list_pending(ctx):
 
@@ -457,7 +457,7 @@ async def list_pending(ctx):
             await ctx.send(msg_to_send)
 
 @bot.command(name='valid', help='Validate a pending submission with the number of the pending score (the number seen on `!listpending`). Exple : `!valid 1`')
-@commands.has_role(ROLE_ADMIN)
+@commands.has_any_role(*ROLE_ADMIN)
 @commands.before_invoke(record_usage)
 async def valid(ctx, id_pending: int = 0):
 
@@ -574,7 +574,7 @@ async def valid(ctx, id_pending: int = 0):
         await ctx.send(msg_to_send)
 
 @bot.command(name='deny', help='Deny a pending submission with the number of the pending score (the number seen on `!listpending`). `!deny pending_number reason`, exple : `!deny 1 "Incorrect map name"`')
-@commands.has_role(ROLE_ADMIN)
+@commands.has_any_role(*ROLE_ADMIN)
 @commands.before_invoke(record_usage)
 async def deny(ctx, id_pending: int = 0, reason: str = ""):
 
@@ -610,7 +610,7 @@ async def deny(ctx, id_pending: int = 0, reason: str = ""):
 The cmd should look like : !newmap map_name band mapper difficulty\n \
 For example : !newmap "System of a Down" "Genocidal Humanoidz" Skeelie 9\n \
 (yeah, add quote if there are spaces)')
-@commands.has_role(ROLE_ADMIN)
+@commands.has_any_role(*ROLE_ADMIN)
 @commands.before_invoke(record_usage)
 async def newmap(ctx, map_name: str = "", band: str = "", mapper: str = "", difficulty: str = ""):
 
