@@ -252,6 +252,39 @@ class Moderators(commands.Cog):
             msg_to_send = ''.join(message)
             await ctx.send(msg_to_send)
 
+    @commands.command(name='auto-add-maps', help='Automatically read the map-check channel to add new maps')
+    @commands.has_any_role(*ROLE_ADMIN)
+    @commands.before_invoke(record_usage)
+    async def autoaddmaps(self, ctx, limit: int =10000):
+
+
+        fixed_channel = ctx.bot.get_channel(790326235615592458)
+        #await fixed_channel.send(message)
+        async for msg in fixed_channel.history(limit=10000): # As an example, I've set the limit to 10000
+            #if msg.author != client.user:                        # meaning it'll read 10000 messages instead of
+            #    if not is_command(msg):                          # the default amount of 100
+            #        data = data.append({'content': msg.content,
+            #                    'time': msg.created_at,
+            #                    'author': msg.author.name}, ignore_index=True)
+            #    if len(data) == limit:
+            #        break
+            #{'footer': {'text': 'How to download? (look at the chanel "tuto")'},
+            #'image': {'url': 'https://i1.wp.com/www.pozzo-live.com/wp-content/uploads/2020/11/123987181_10158117518049032_1805713449174542166_o.jpg?ssl=1', 'proxy_url': 'https://images-ext-1.discordapp.net/external/diFTeaQxBlYCYHZKSFwo6hm4LVN0sLupYC9Vmt_iy3Y/%3Fssl%3D1/https/i1.wp.com/www.pozzo-live.com/wp-content/uploads/2020/11/123987181_10158117518049032_1805713449174542166_o.jpg',
+            #    'width': 2048, 'height': 2048}, 'author': {'name': 'Difficulty : 5 & 7 & 10'}, 'color': 15662848, 'type': 'rich', i
+            #'description': 'by Skeelie', 'url': 'https://cloud.ghosthub.fr/s/xRaojKCYbZ3ibBj', 'title': 'System Of A Down - Genocidal Humanoidz'}
+            d_embed = msg.embeds[0].to_dict()
+            try:
+                map_band, map_title = d_embed['title'].split('-')
+                map_diffs = d_embed['author']['name'].split(':')[1].strip().split('&')
+                map_mapper = d_embed['description'].split('by')[1].strip()
+                
+                for diff in map_diffs:
+                    print(map_band.strip(), map_title.strip(), map_mapper, diff.strip())
+            except err:
+                print(d_embed, str(err))
+
+    
+    
 
 def setup(bot):
     bot.add_cog(Moderators(bot))

@@ -281,7 +281,7 @@ class Players(commands.Cog):
     
     @commands.command(name='submit', help='Submit a new score with all the details. \n \
     !submit proof map_name band mapper difficulty score misses perfects_percent triggers \n \
-    Exple: !submit https://image-or-video-proof.rocks Vodka Korpiklaani Vred 5 7777 1 99 3')
+    Exple: `!submit https://image-or-video-proof.rocks Vodka Korpiklaani Vred 5 7777 1 99 3`')
     @commands.before_invoke(record_usage)
     async def submit(
             self,
@@ -312,7 +312,7 @@ class Players(commands.Cog):
         if not proof or not map_name or not band or not mapper or not difficulty or not score or not misses or not perfects_percent or not triggers:
             await ctx.send("Please fill all the field so admins can verify your submission easily :-). \n \
     Your submission should look like : !submit proof map_name band mapper difficulty score misses perfects_percent triggers \n \
-    For example : !submit https://image-or-video-proof.rocks Vodka Korpiklaani Vred 5 7777 1 99 3")
+    For example : `!submit https://image-or-video-proof.rocks Vodka Korpiklaani Vred 5 7777 1 99 3`")
             return
     
         pendings: List[Dict[str, Any]] = []
