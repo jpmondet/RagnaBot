@@ -1,0 +1,5 @@
+bandit
+black
+mypy
+pylint
+-r requirements.txt
