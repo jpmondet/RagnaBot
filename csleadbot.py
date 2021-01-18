@@ -13,7 +13,7 @@ from utils.bot_utils import *
 CUSTOM_COGS = ['cogs.players_cmds', 'cogs.elevated_cmds']
 
 # BOT FUNCTIONS START HERE
-bot = commands.Bot(command_prefix='!')
+bot = commands.Bot(command_prefix=CMD_PREFIX)
 
 @bot.check
 def check_channel(ctx):
@@ -39,6 +39,9 @@ async def on_command_error(ctx, error):
         return
     if isinstance(error, commands.errors.CommandOnCooldown):
         await ctx.send("Sorry, we have to limit this command to 1 use every 60 seconds...")
+        return
+    else:
+        print(error)
         return
  
 for cust_cog in CUSTOM_COGS:
