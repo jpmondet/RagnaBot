@@ -13,33 +13,35 @@ class Players(commands.Cog):
     @commands.before_invoke(record_usage)
     async def top(self, ctx, nb_to_show: int = 10):
     
-        for message in paginate("Not Implemented Yet"):
+        for message in paginate("Not totally implemented Yet (only checks total score over all maps for now)"):
             msg_to_send = ''.join(message)
             await ctx.send(msg_to_send)
     
-        #print("Starting to get overall leaderboard")
+        print("Starting to get overall leaderboard")
     
-        #players_details: List[Dict[str, Any]] = []
-        #with open(PLAYERS_DETAILS) as pfile:
-        #    players_details = json.load(pfile)
+        players_details: List[Dict[str, Any]] = []
+        with open(PLAYERS_DETAILS) as pfile:
+            players_details = json.load(pfile)
     
-        #top_players: str = "\n"
+        top_players: str = "\n"
     
-        #if len(players_details) <= nb_to_show:
-        #    nb_to_show = len(players_details)
+        if len(players_details) <= nb_to_show:
+            nb_to_show = len(players_details)
     
-        #print("Nb players to show:", nb_to_show)
-        #
-        #for rank, pdetails in enumerate(players_details):
-        #    if nb_to_show <= 0:
-        #        break
-        #    print(rank, pdetails)
-        #    top_players += f"{str(rank+1)} - {pdetails['name']} : {pdetails['total_score']}\n"
-        #    nb_to_show -= 1
+        print("Nb players to show:", nb_to_show)
+
+        sorted_players = sorted(players_details, key=lambda k: float(k['total_score']), reverse=True)
+        
+        for rank, pdetails in enumerate(sorted_players):
+            if nb_to_show <= 0:
+                break
+            print(rank, pdetails)
+            top_players += f"{str(rank+1)} - {pdetails['name']} : {pdetails['total_score']}\n"
+            nb_to_show -= 1
     
-        #for message in paginate(top_players):
-        #    msg_to_send = ''.join(message)
-        #    await ctx.send(msg_to_send)
+        for message in paginate(top_players):
+            msg_to_send = ''.join(message)
+            await ctx.send(msg_to_send)
     
     @commands.command(name='topmap', help='Shows the current top on a specific map')
     @commands.before_invoke(record_usage)
@@ -52,7 +54,7 @@ class Players(commands.Cog):
     
         matching_songs: List[Dict[str, Any]] = []
         for cs in custom_songs:
-            if map_name in cs['full_name']:
+            if map_name.lower() in cs['full_name'].lower():
                 matching_songs.append(cs)
     
         print("Found matching songs:", matching_songs)
@@ -113,6 +115,7 @@ class Players(commands.Cog):
             "total_misses": 0,
             "perfects_percent_avg": 0,
             "total_score": 0,
+            "total_triggers": 0,
         }
         players_details.append(new_player)
     
@@ -257,9 +260,73 @@ class Players(commands.Cog):
     @commands.before_invoke(record_usage)
     async def playerstats(self, ctx, player_name: str = ""):
     
-        for message in paginate("Not Implemented Yet"):
+        for message in paginate("Not totally implemented Yet (procrastinating on all the calculus needed xD )"):
             msg_to_send = ''.join(message)
             await ctx.send(msg_to_send)
+    
+        print("Starting to get player stats")
+
+        if not player_name:
+            print("Player name not in parameter. We look for the author of the message")
+            id_accounts = load_accounts()
+            player_name = id_accounts.get(str(ctx.author.id))
+            print(f"Ok, the author is registered as {player_name}")
+    
+        if not player_name:
+            await ctx.send('Player not registered and no player name chosen. Please use `!register "YOUR_INGAME_NAME"` (yeah, with **quotes** ^^) to register.\n \
+or simply choose someone, for example : `!playerstats "OMDN | Gneuh [knee-uh]"`')
+            return
+    
+        players_details: List[Dict[str, Any]] = []
+        with open(PLAYERS_DETAILS) as pfile:
+            players_details = json.load(pfile)
+
+        pstats_str: str = ""
+        total_score: float = 0
+        total_misses: int = 0
+        perfects_percent: float = 0
+        perfects_percent_avg: float = 0
+        total_triggers: int = 0
+        for pdetails in players_details:
+            if pdetails['name'] == player_name:
+                print(f"{player_name} found")
+                # Updating 
+                #TODO: Also update top1s & top10s
+                if not pdetails['maps_played']:
+                    print(f"No scores found for {pdetails}")
+                    pstats_str = f"No scores found for {player_name}"
+                    break
+                for mapp in pdetails['maps_played']:
+                    total_score += float(mapp["score"])
+                    total_misses += int(mapp["misses"])
+                    perfects_percent += float(mapp["perfects_percent"])
+                    total_triggers += int(mapp["triggers"])
+                pdetails["total_score"] = total_score
+                pdetails["total_misses"] = total_misses
+                perfects_percent_avg = perfects_percent / len(pdetails['maps_played'])
+                pdetails["perfects_percent_avg"] = perfects_percent_avg
+                pdetails["total_triggers"] = total_triggers
+                pstats_str =  f'{player_name}\n\t \
+Total score: {total_score},\n\t \
+Total misses: {total_misses},\n\t \
+Total triggers: {total_triggers},\n\t \
+Perfects percent average: {perfects_percent_avg}'
+                print(pstats_str)
+    
+        if not pstats_str:
+            await ctx.send(f'Hmmm, **{player_name}** not found :thinking:  Am I bugged? :upside_down: Or are you? xD')
+            return
+        
+        with open(PLAYERS_DETAILS, 'w') as csfile:
+            json.dump(players_details, csfile)
+    
+        print("Player updated:", player_name)
+
+    
+        for message in paginate(pstats_str):
+            msg_to_send = ''.join(message)
+            await ctx.send(msg_to_send)
+        
     
     @commands.command(name='listmaps', help='List all maps')
     @commands.before_invoke(record_usage)
@@ -281,7 +348,7 @@ class Players(commands.Cog):
     
     @commands.command(name='submit', help='Submit a new score with all the details. \n \
     !submit proof map_name band mapper difficulty score misses perfects_percent triggers \n \
-    Exple: `!submit https://image-or-video-proof.rocks Vodka Korpiklaani Vred 5 7777 1 99 3`')
+    Exple: `!submit https://image-or-video-proof.rocks Vodka Korpiklaani Vred 6 7777 1 99 3`')
     @commands.before_invoke(record_usage)
     async def submit(
             self,
@@ -313,6 +380,45 @@ class Players(commands.Cog):
             await ctx.send("Please fill all the field so admins can verify your submission easily :-). \n \
     Your submission should look like : !submit proof map_name band mapper difficulty score misses perfects_percent triggers \n \
     For example : `!submit https://image-or-video-proof.rocks Vodka Korpiklaani Vred 5 7777 1 99 3`")
+            return
+
+        try:
+            try_d = int(difficulty)
+            if try_d < 1 or try_d > 20:
+                raise ValueError
+        except ValueError:
+            await ctx.send("Difficulty should be a number between 1 and...20? ;-)")
+
+        try:
+            try_d = float(score)
+            if try_d < 0:
+                raise ValueError
+        except ValueError:
+            await ctx.send("Score should be a number (can be decimal) and be positive ;-)")
+            return
+
+        try:
+            try_d = int(misses)
+            if try_d < 0:
+                raise ValueError
+        except ValueError:
+            await ctx.send("Misses should be a number and be positive ;-)")
+            return
+
+        try:
+            try_d = int(triggers)
+            if try_d < 0:
+                raise ValueError
+        except ValueError:
+            await ctx.send("Triggers should be a number and be positive ;-)")
+            return
+
+        try:
+            try_d = float(perfects_percent)
+            if try_d < 0:
+                raise ValueError
+        except ValueError:
+            await ctx.send("Perfects percentage should be a number (can be decimal) and be positive ;-)")
             return
     
         pendings: List[Dict[str, Any]] = []

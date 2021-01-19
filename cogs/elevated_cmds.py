@@ -109,11 +109,11 @@ class Moderators(commands.Cog):
         old_score: int = -1
         for rank, ld_score in enumerate(map_ld):
             if ld_score['player_name'] == valid_score['player_name']:
-                if int(ld_score['score']) > int(valid_score['score']):
+                if float(ld_score['score']) > float(valid_score['score']):
                     await ctx.send(f"The player {valid_score['player_name']} has already a better score than the one submitted on {full_name}")
                     return
                 old_score = rank
-            elif int(ld_score['score']) < int(valid_score['score']):
+            elif float(ld_score['score']) < float(valid_score['score']):
                 new_rank = rank
 
         print("Old score placement (-1 if there isnt'):", old_score)
@@ -130,7 +130,7 @@ class Moderators(commands.Cog):
         song_to_update["leaderboard"] = map_ld
         print("Map updated:", song_to_update)
         if id_song < len(custom_songs):
-            custom_songs[id_song] = song_to_update
+            custom_songs.insert(id_song, song_to_update)
         else:
             custom_songs.append(song_to_update)
         print("Custom songs updated:", custom_songs)
@@ -138,26 +138,23 @@ class Moderators(commands.Cog):
         with open(CUSTOM_SONGS, 'w') as csfile:
             json.dump(custom_songs, csfile)
 
-        #Update player details
-        #players_details: List[Dict[str, Any]] = []
-        #with open(PLAYERS_DETAILS) as pfile:
-        #    players_details = json.load(pfile)
+        ## Update player details
+        players_details: List[Dict[str, Any]] = []
+        with open(PLAYERS_DETAILS) as pfile:
+            players_details = json.load(pfile)
 
-        #for pdetails in players_details:
-        #    if pdetails['name'] == valid_score['player_name']:
-        #        #TODO: Also remove old scores stats...
-        #        pdetails['total_score'] += int(valid_score['score'])
-        #        pdetails['total_misses'] += int(valid_score['misses'])
-        #        pdetails['maps_played'].append(song_to_update['id'])
-        #        #TODO: Tops must be updated on all players... OMG !
-        #        if new_rank + 1 <= 10:
-        #            pdetails['top10s'] += 1
-        #        if new_rank + 1 == 1:
-        #            pdetails['top1s'] += 1
-        #        #TODO: perfects_percent_avg must also be updated
+        for pdetails in players_details:
+            if pdetails['name'] == valid_score['player_name']:
+                map_id = -1
+                for mapid, mapp in enumerate(pdetails['maps_played']):
+                    if song_to_update['full_name'] == mapp['full_name']:
+                        map_id = mapid
+                if map_id > -1:
+                    del(pdetails['maps_played'][map_id])
+                pdetails['maps_played'].append(valid_score)
 
-        #with open(PLAYERS_DETAILS, 'w') as pfile:
-        #    json.dump(players_details, pfile)
+        with open(PLAYERS_DETAILS, 'w') as pfile:
+            json.dump(players_details, pfile)
 
         print(f"Deleting pending {pendings[id_pending-1]}")
         # Remove score from pendings
@@ -212,7 +209,7 @@ class Moderators(commands.Cog):
     @commands.before_invoke(record_usage)
     async def newmap(self, ctx, map_name: str = "", band: str = "", mapper: str = "", difficulty: str = ""):
 
-        if not map_name or not band or not mapper:
+        if not map_name or not band or not mapper or not difficulty:
             await ctx.send('Please, specify all the details of the new map. The cmd should look like : !newmap map_name band mapper difficulty\n \
     For example : !newmap "Genocidal Humanoidz" "System of a Down" Skeelie 9\n \
     (yeah, add quote if there are spaces)')
