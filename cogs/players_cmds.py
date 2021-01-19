@@ -22,6 +22,10 @@ class Players(commands.Cog):
         players_details: List[Dict[str, Any]] = []
         with open(PLAYERS_DETAILS) as pfile:
             players_details = json.load(pfile)
+
+        # Force update all players:
+        for pdetails in players_details:
+            await self.playerstats(ctx, pdetails['name'], False)
     
         top_players: str = "\n"
     
@@ -258,11 +262,12 @@ class Players(commands.Cog):
     
     @commands.command(name='playerstats', help='Get overall stats of a player')
     @commands.before_invoke(record_usage)
-    async def playerstats(self, ctx, player_name: str = ""):
+    async def playerstats(self, ctx, player_name: str = "", called_as_cmd: bool = True):
     
-        for message in paginate("Not totally implemented Yet (procrastinating on all the calculus needed xD )"):
-            msg_to_send = ''.join(message)
-            await ctx.send(msg_to_send)
+        if called_as_cmd:
+            for message in paginate("Not totally implemented Yet"):
+                msg_to_send = ''.join(message)
+                await ctx.send(msg_to_send)
     
         print("Starting to get player stats")
 
@@ -323,9 +328,10 @@ Perfects percent average: {perfects_percent_avg}'
         print("Player updated:", player_name)
 
     
-        for message in paginate(pstats_str):
-            msg_to_send = ''.join(message)
-            await ctx.send(msg_to_send)
+        if called_as_cmd:
+            for message in paginate(pstats_str):
+                msg_to_send = ''.join(message)
+                await ctx.send(msg_to_send)
         
     
     @commands.command(name='listmaps', help='List all maps')
