@@ -78,6 +78,46 @@ class Moderators(commands.Cog):
 
         print("Valid score found:", valid_score)
 
+        try:
+            try_d = int(valid_score['difficulty'])
+            if try_d < 1 or try_d > 20:
+                raise ValueError
+        except ValueError:
+            await ctx.send("Difficulty should be a number between 1 and...20? ;-)")
+            return
+
+        try:
+            try_d = float(valid_score['score'])
+            if try_d < 0:
+                raise ValueError
+        except ValueError:
+            await ctx.send("Score should be a number (can be decimal) and be positive ;-)")
+            return
+
+        try:
+            try_d = int(valid_score['misses'])
+            if try_d < 0:
+                raise ValueError
+        except ValueError:
+            await ctx.send("Misses should be a number and be positive ;-)")
+            return
+
+        try:
+            try_d = int(valid_score['triggers'])
+            if try_d < 0:
+                raise ValueError
+        except ValueError:
+            await ctx.send("Triggers should be a number and be positive ;-)")
+            return
+
+        try:
+            try_d = float(valid_score['perfects_percent'])
+            if try_d < 0:
+                raise ValueError
+        except ValueError:
+            await ctx.send("Perfects percentage should be a number (can be decimal) and be positive ;-)")
+            return
+
         # Update leaderboards on custom_songs
         custom_songs: List[Dict[str, Any]] = []
         with open(CUSTOM_SONGS) as csfile:

@@ -388,6 +388,7 @@ Perfects percent average: {perfects_percent_avg}'
                 raise ValueError
         except ValueError:
             await ctx.send("Difficulty should be a number between 1 and...20? ;-)")
+            return
 
         try:
             try_d = float(score)
