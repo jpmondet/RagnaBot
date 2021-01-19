@@ -153,8 +153,11 @@ class Moderators(commands.Cog):
                     await ctx.send(f"The player {valid_score['player_name']} has already a better score than the one submitted on {full_name}")
                     return
                 old_score = rank
-            elif float(ld_score['score']) < float(valid_score['score']):
-                new_rank = rank
+                if new_rank == -1:
+                    new_rank = rank
+            if float(ld_score['score']) < float(valid_score['score']):
+                if new_rank == -1:
+                    new_rank = rank
 
         print("Old score placement (-1 if there isnt'):", old_score)
         if old_score > -1:
@@ -187,7 +190,8 @@ class Moderators(commands.Cog):
             if pdetails['name'] == valid_score['player_name']:
                 map_id = -1
                 for mapid, mapp in enumerate(pdetails['maps_played']):
-                    if song_to_update['full_name'] == mapp['full_name']:
+                    full_name = f"{mapp['band']} - {mapp['map_name']} - {mapp['mapper']} - Level {mapp['difficulty']}"
+                    if song_to_update['full_name'] == full_name:
                         map_id = mapid
                 if map_id > -1:
                     del(pdetails['maps_played'][map_id])
