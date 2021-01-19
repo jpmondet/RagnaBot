@@ -17,18 +17,21 @@ class Players(commands.Cog):
             msg_to_send = ''.join(message)
             await ctx.send(msg_to_send)
     
-        print("Starting to get overall leaderboard")
-    
+        print("Force update all players before showing top")
+
         players_details: List[Dict[str, Any]] = []
         with open(PLAYERS_DETAILS) as pfile:
             players_details = json.load(pfile)
-
-        # Force update all players:
         for pdetails in players_details:
             await self.playerstats(ctx, pdetails['name'], False)
     
+        print("Ok, starting to get overall leaderboard")
+
         top_players: str = "\n"
     
+        with open(PLAYERS_DETAILS) as pfile:
+            players_details = json.load(pfile)
+
         if len(players_details) <= nb_to_show:
             nb_to_show = len(players_details)
     
