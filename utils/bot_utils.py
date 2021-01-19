@@ -13,7 +13,8 @@ load_dotenv()
 TOKEN: str = getenv("DISCORD_TOKEN")
 GUILD: str = getenv('DISCORD_GUILD').split(',')
 CHANNEL: str = getenv('DISCORD_CHANNEL').split(',')
-ROLE_ADMIN: str = getenv('ROLE_ADMIN').split(',')
+ROLE_ADMIN: str = getenv('RAGNABOT_ROLE_ADMIN').split(',')
+CMD_PREFIX: str = getenv("RAGNABOT_CMD_PREFIX")
 
 CUSTOM_SONGS: str = "custom_songs.json"
 PLAYERS_DETAILS: str = "players.json"
