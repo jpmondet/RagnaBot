@@ -2,7 +2,7 @@
 
 #! /usr/bin/env python3
 
-#TODO: Read all messages from map-check to add them automatically
+#TODO: Migrate json files to a proper db (hesitating between mongodb & couchbase)
 
 import discord
 from discord.ext import commands
