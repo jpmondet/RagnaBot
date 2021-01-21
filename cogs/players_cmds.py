@@ -43,7 +43,7 @@ class Players(commands.Cog):
             if nb_to_show <= 0:
                 break
             print(rank, pdetails)
-            top_players += f"{str(rank+1)} - {pdetails['name']} : {pdetails['total_score']}\n"
+            top_players += f"{str(rank+1)} - {pdetails['name']} : {pdetails['total_score']:.2f}\n"
             nb_to_show -= 1
     
         for message in paginate(top_players):
