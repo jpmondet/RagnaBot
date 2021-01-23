@@ -5,6 +5,7 @@
 from os import getenv
 from json import load as jload
 from typing import Dict, List, Any
+from pymongo import MongoClient, ASCENDING as MDBASCENDING
 
 from dotenv import load_dotenv
 
@@ -15,20 +16,21 @@ GUILD: str = getenv('DISCORD_GUILD').split(',')
 CHANNEL: str = getenv('DISCORD_CHANNEL').split(',')
 ROLE_ADMIN: str = getenv('RAGNABOT_ROLE_ADMIN').split(',')
 CMD_PREFIX: str = getenv("RAGNABOT_CMD_PREFIX")
+DB_STRING: str = getenv("RAGNABOT_DB")
 
 CUSTOM_SONGS: str = "custom_songs.json"
 PLAYERS_DETAILS: str = "players.json"
 PENDING_SCORES: str = "pending_scores.json"
 ACCOUNTS: str = "id_accounts_list.json"
 
-def load_accounts():
-    """ Loads registered discord ids accs from files and return the associated dict """
-    id_accounts: Dict[str, str] = {}
+DB_CLIENT = MongoClient(DB_STRING)
+DB = DB_CLIENT.ragnabot
 
-    with open(ACCOUNTS, 'r') as facc:
-        id_accounts = jload(facc)
-    
-    return id_accounts
+CUSTOM_SONGS_COLLECTION = DB.csongs
+LBOARDS_COLLECTION = DB.cslboards
+PLAYERS_DETAILS_COLLECTION = DB.players
+PENDING_SCORES_COLLECTION = DB.pending
+ACCOUNTS_COLLECTION = DB.accounts
 
 def paginate(lines, prefix='```css\n', suffix='```', chars=1850):
     """ Paginate long outputs since discord limits to 2000 chars... """
