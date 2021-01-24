@@ -17,6 +17,8 @@ CHANNEL: str = getenv('DISCORD_CHANNEL').split(',')
 ROLE_ADMIN: str = getenv('RAGNABOT_ROLE_ADMIN').split(',')
 CMD_PREFIX: str = getenv("RAGNABOT_CMD_PREFIX")
 DB_STRING: str = getenv("RAGNABOT_DB")
+RAGNASONG_URL: str = "https://ragnasong.com/api/"
+RAGNASONG_MAPS: str = RAGNASONG_URL + "/searchMap/?start={}&dificulty="
 
 CUSTOM_SONGS: str = "custom_songs.json"
 PLAYERS_DETAILS: str = "players.json"
@@ -29,6 +31,7 @@ DB = DB_CLIENT.ragnabot
 CUSTOM_SONGS_COLLECTION = DB.csongs
 LBOARDS_COLLECTION = DB.cslboards
 PLAYERS_DETAILS_COLLECTION = DB.players
+MAPS_PLAYED_COLLECTION = DB.maps_played
 PENDING_SCORES_COLLECTION = DB.pending
 ACCOUNTS_COLLECTION = DB.accounts
 
