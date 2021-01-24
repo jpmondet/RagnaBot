@@ -13,6 +13,7 @@ CUSTOM_COGS = ["cogs.players_cmds", "cogs.elevated_cmds"]
 if (
     not list(CUSTOM_SONGS_COLLECTION.find())
     or not list(PLAYERS_DETAILS_COLLECTION.find())
+    or not list(MAPS_PLAYED_COLLECTION.find())
     or not list(LBOARDS_COLLECTION.find())
     or not list(ACCOUNTS_COLLECTION.find())
     or not list(PENDING_SCORES_COLLECTION.find())
