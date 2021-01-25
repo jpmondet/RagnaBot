@@ -30,10 +30,9 @@ DB = DB_CLIENT.ragnabot
 
 CUSTOM_SONGS_COLLECTION = DB.csongs
 LBOARDS_COLLECTION = DB.cslboards
-PLAYERS_DETAILS_COLLECTION = DB.players
-MAPS_PLAYED_COLLECTION = DB.maps_played
 PENDING_SCORES_COLLECTION = DB.pending
 ACCOUNTS_COLLECTION = DB.accounts
+INDEX_SEQUENCE = DB.index_seq
 
 def paginate(lines, prefix='```css\n', suffix='```', chars=1850):
     """ Paginate long outputs since discord limits to 2000 chars... """
