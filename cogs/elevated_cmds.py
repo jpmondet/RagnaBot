@@ -2,8 +2,9 @@ import json
 import discord
 from discord.ext import commands
 
-from utils.bot_utils import *
+from storage.db_layer import *
 
+#TODO: Migrate valid/deny
 
 class Moderators(commands.Cog):
     def __init__(self, bot):
@@ -12,18 +13,48 @@ class Moderators(commands.Cog):
     @commands.command(name='listplayers', help='List all players')
     @commands.has_any_role(*ROLE_ADMIN)
     @commands.before_invoke(record_usage)
-    async def list_players(self, ctx):
+    async def list_players(self, ctx, page: int = 1, perpage: int = 10):
 
-        players_details: List[Dict[str, Any]] = []
-        with open(PLAYERS_DETAILS) as pfile:
-            players_details = json.load(pfile)
+        # page 1 -> 1 to 10 players
+        # page 2 -> 11 to 20 
+        # page x -> perpage * (page - 1) + nb_player
+
+        nb_min = perpage * (page - 1)
+        nb_max = perpage * (page - 1) + (perpage + 1)
 
         all_players: str = ""
+        for nb_player, acc in enumerate(get_accounts()):
+            if nb_player + 1 <= nb_min:
+                continue
+            if nb_player + 1 >= nb_max:
+                break
+            if nb_player + 1 > nb_min and nb_player + 1 < nb_max:
+                print(acc)
+                all_players += f"{acc['player_name']}\n"
 
-        for pdetails in players_details:
-            print(pdetails)
-            print(all_players)
-            all_players += f"{pdetails['name']}\n"
+        for message in paginate(all_players):
+            msg_to_send = ''.join(message)
+            await ctx.send(msg_to_send)
+
+    @commands.command(name='searchplayer', help='Search a player by name')
+    @commands.has_any_role(*ROLE_ADMIN)
+    @commands.before_invoke(record_usage)
+    async def search_players(self, ctx, name_to_find: str = ""):
+
+        if not name_to_find:
+            await ctx.send("Please specify a word to find. For exemple !searchplayer gneuh should find the player with \n \
+this word in the name")
+            return
+
+        players_found = search_account_by_name(name_to_find)
+
+        all_players = ""
+        for acc in players_found:
+            all_players += f"{acc['player_name']}\n"
+
+        if not all_players:
+            await ctx.send("No player found with that pattern, sorry")
+            return
 
         for message in paginate(all_players):
             msg_to_send = ''.join(message)
@@ -34,25 +65,36 @@ class Moderators(commands.Cog):
     @commands.before_invoke(record_usage)
     async def list_pending(self, ctx):
 
-        pendings: List[Dict[str, Any]] = []
-        print(pendings)
-        with open(PENDING_SCORES) as pfile:
-            pendings = json.load(pfile)
-        print(pendings)
-
-        if not pendings:
-            await ctx.send("Looks like there isn't any pending submission, you're good to go :+1:")
-            return
+        pendings = get_pending_submissions()
 
         output: str = ""
 
         for id_req, pdetails in enumerate(pendings):
-            pdetails_str: str = ' '.join(['        ' + str(key) + ': ' + str(value) + '\n' for key, value in pdetails.items()])
+            print(id_req, pdetails)
+            map_submitted = get_map_by_uuid(pdetails['map_uuid'])
+            print(map_submitted)
+            account = get_account_by_player_id(pdetails['player_id'])
+            print(account)
+            pdetails_str: str = f"        In-game name: {account['player_name']}" + '\n'
+            pdetails_str += f"        Map played: {map_submitted['artist']} - "
+            pdetails_str += f"{map_submitted['title']} - "
+            pdetails_str += f"{map_submitted['ownerUsername']} "
+            pdetails_str += f"(map uuid: {map_submitted['uuid']})" + '\n'
+            pdetails_str += f"        score: {pdetails['score']} - "
+            pdetails_str += f"misses: {pdetails['misses']} - "
+            pdetails_str += f"perfects_percent: {pdetails['perfects_percent']} - "
+            pdetails_str += f"triggers: {pdetails['triggers']}" + "\n"
+            pdetails_str += f"        proof: {pdetails['proof']}" + "\n"
             print(pdetails_str)
-            output = f"{id_req + 1} :\n{pdetails_str}\n"
+            output = f"{id_req + 1} :     Discord user that submitted: {account['discord_name']}\n{pdetails_str}\n"
             for message in paginate(output):
                 msg_to_send = ''.join(message)
                 await ctx.send(msg_to_send)
+
+        if not output:
+            await ctx.send("Looks like there isn't any pending submission, you're good to go :+1:")
+            return
+
 
     @commands.command(name='valid', help='Validate a pending submission with the number of the pending score (the number seen on `!listpending`). Exple : `!valid 1`')
     @commands.has_any_role(*ROLE_ADMIN)
@@ -63,9 +105,7 @@ class Moderators(commands.Cog):
             await ctx.send("Please, indicate the id of the pending score to validate (shown with `!listpending`). For example : `!valid 23`")
             return
 
-        pendings: List[Dict[str, Any]] = []
-        with open(PENDING_SCORES) as pfile:
-            pendings = json.load(pfile)
+        pendings = get_pending_submissions()
 
         valid_score: Dict[str, Any] = {}
         for id_req, pdetails in enumerate(pendings):
@@ -245,90 +285,92 @@ class Moderators(commands.Cog):
             msg_to_send = ''.join(message)
             await ctx.send(msg_to_send)
 
-    @commands.command(name='newmap', help='Add a new custom map that will have a leaderboard associated. \n \
-    The cmd should look like : !newmap map_name band mapper difficulty\n \
-    For example : !newmap "System of a Down" "Genocidal Humanoidz" Skeelie 9\n \
-    (yeah, add quote if there are spaces)')
-    @commands.has_any_role(*ROLE_ADMIN)
-    @commands.before_invoke(record_usage)
-    async def newmap(self, ctx, map_name: str = "", band: str = "", mapper: str = "", difficulty: str = ""):
+    # NOT NEEDED ANYMORE SINCE RAGNASONG IS NOW THE SOURCE OF TRUTH
+    #@commands.command(name='newmap', help='Add a new custom map that will have a leaderboard associated. \n \
+    #The cmd should look like : !newmap map_name band mapper difficulty\n \
+    #For example : !newmap "System of a Down" "Genocidal Humanoidz" Skeelie 9\n \
+    #(yeah, add quote if there are spaces)')
+    #@commands.has_any_role(*ROLE_ADMIN)
+    #@commands.before_invoke(record_usage)
+    #async def newmap(self, ctx, map_name: str = "", band: str = "", mapper: str = "", difficulty: str = ""):
 
-        if not map_name or not band or not mapper or not difficulty:
-            await ctx.send('Please, specify all the details of the new map. The cmd should look like : !newmap map_name band mapper difficulty\n \
-    For example : !newmap "Genocidal Humanoidz" "System of a Down" Skeelie 9\n \
-    (yeah, add quote if there are spaces)')
-            return
+    #    if not map_name or not band or not mapper or not difficulty:
+    #        await ctx.send('Please, specify all the details of the new map. The cmd should look like : !newmap map_name band mapper difficulty\n \
+    #For example : !newmap "Genocidal Humanoidz" "System of a Down" Skeelie 9\n \
+    #(yeah, add quote if there are spaces)')
+    #        return
 
-        custom_songs: List[Dict[str, Any]] = []
-        with open(CUSTOM_SONGS) as csfile:
-            custom_songs = json.load(csfile)
+    #    custom_songs: List[Dict[str, Any]] = []
+    #    with open(CUSTOM_SONGS) as csfile:
+    #        custom_songs = json.load(csfile)
 
-        full_name: str = f"{band} - {map_name} - {mapper} - Level {difficulty}"
+    #    full_name: str = f"{band} - {map_name} - {mapper} - Level {difficulty}"
 
-        higher_id: int = 0
-        for cs in custom_songs:
-            if cs['full_name'] == full_name:
-                await ctx.send(f'Owah sorry, the map **{full_name}** already exists :o \n \
-                        If this is a new version, either remove the previous one with `!removemap` or add a version to the name or something but it can get messy xD')
-                return
-            if higher_id < cs['id']:
-                higher_id = cs['id']
+    #    higher_id: int = 0
+    #    for cs in custom_songs:
+    #        if cs['full_name'] == full_name:
+    #            await ctx.send(f'Owah sorry, the map **{full_name}** already exists :o \n \
+    #                    If this is a new version, either remove the previous one with `!removemap` or add a version to the name or something but it can get messy xD')
+    #            return
+    #        if higher_id < cs['id']:
+    #            higher_id = cs['id']
 
-        new_map: Dict[str, Any] = {
-            "id": higher_id + 1,
-            "full_name": full_name,
-            "name": map_name,
-            "band": band,
-            "mapper": mapper,
-            "difficulty": difficulty,
-            "leaderboard": []
-        }
+    #    new_map: Dict[str, Any] = {
+    #        "id": higher_id + 1,
+    #        "full_name": full_name,
+    #        "name": map_name,
+    #        "band": band,
+    #        "mapper": mapper,
+    #        "difficulty": difficulty,
+    #        "leaderboard": []
+    #    }
 
-        custom_songs.append(new_map)
-        with open(CUSTOM_SONGS, 'w') as csfile:
-            json.dump(custom_songs, csfile)
+    #    custom_songs.append(new_map)
+    #    with open(CUSTOM_SONGS, 'w') as csfile:
+    #        json.dump(custom_songs, csfile)
 
-        output: str = f"The map {full_name} is correctly added :-)"
-        for message in paginate(output):
-            msg_to_send = ''.join(message)
-            await ctx.send(msg_to_send)
+    #    output: str = f"The map {full_name} is correctly added :-)"
+    #    for message in paginate(output):
+    #        msg_to_send = ''.join(message)
+    #        await ctx.send(msg_to_send)
 
-    @commands.command(name='auto-add-maps', help='Automatically read the map-check channel to add new maps')
-    @commands.has_any_role(*ROLE_ADMIN)
-    @commands.before_invoke(record_usage)
-    async def autoaddmaps(self, ctx, limit: int =10000):
-        # Getting messages from the maps channel:
-        fixed_channel = ctx.bot.get_channel(790326235615592458)
-        async for msg in fixed_channel.history(limit=limit):
-            #{'footer': {'text': 'How to download? (look at the chanel "tuto")'},
-            #'image': {'url': 'https://i1.wp.com/www.pozzo-live.com/wp-content/uploads/2020/11/123987181_10158117518049032_1805713449174542166_o.jpg?ssl=1', 'proxy_url': 'https://images-ext-1.discordapp.net/external/diFTeaQxBlYCYHZKSFwo6hm4LVN0sLupYC9Vmt_iy3Y/%3Fssl%3D1/https/i1.wp.com/www.pozzo-live.com/wp-content/uploads/2020/11/123987181_10158117518049032_1805713449174542166_o.jpg',
-            #    'width': 2048, 'height': 2048}, 'author': {'name': 'Difficulty : 5 & 7 & 10'}, 'color': 15662848, 'type': 'rich', i
-            #'description': 'by Skeelie', 'url': 'https://cloud.ghosthub.fr/s/xRaojKCYbZ3ibBj', 'title': 'System Of A Down - Genocidal Humanoidz'}
-            if msg.embeds:
-                d_embed = msg.embeds[0].to_dict()
-                if not isinstance(d_embed, dict):
-                    # Must not be a map :
-                    print(d_embed)
-                    continue
-                if not d_embed.get('title'):
-                    # Sometimes, there are weird maps with some missing metadatas : 
-                        #{'footer': {'text': 'How to download? (look at the chanel "tuto")'}, 'image': {'url': 'https://images.genius.com/97025d7ad6f33049688ada91b3a35368.1000x1000x1.jpg', 'proxy_url': 'https://images-ext-2.discordapp.net/external/2P8Z9cAbv6qZuCjWT8V-UxNES9SXHdZ6otHQQGuTM6M/https/images.genius.com/97025d7ad6f33049688ada91b3a35368.1000x1000x1.jpg', 'width': 1000, 'height': 1000}, 'author': {'name': 'AJR-Beats', 'url': 'https://cloud.ghosthub.fr/s/sbS3Hy9xf7638Za'}, 'color': 15662848, 'type': 'rich', 'description': 'by 4FriendZone'}
-                    print(d_embed)
-                    continue
-                map_band_title = d_embed['title'].split('-')
-                if len(map_band_title) < 2:
-                    # Some maps have strange '–' instead of '-' as separator
-                    map_band_title = d_embed['title'].split('–')
-                map_band = map_band_title[0].strip()
-                # In case there was a '-' in the name of the map, we join it back
-                map_title = '-'.join(map_band_title[1:])
-                map_title = map_title.strip()
-                map_diffs = d_embed['author']['name'].split(':')[1].split('&')
-                map_mapper = d_embed['description'].split('by')[1].strip()
-                for diff in map_diffs:
-                    print(map_band, map_title, map_mapper, diff.strip())
-                    # Now that we have all infos, we actually add the maps
-                    await self.newmap(ctx, map_title, map_band, map_mapper, diff.strip())
+    # NOT NEEDED ANYMORE SINCE RAGNASONG IS NOW THE SOURCE OF TRUTH (will need une auto-update tho)
+    #@commands.command(name='auto-add-maps', help='Automatically read the map-check channel to add new maps')
+    #@commands.has_any_role(*ROLE_ADMIN)
+    #@commands.before_invoke(record_usage)
+    #async def autoaddmaps(self, ctx, limit: int =10000):
+    #    # Getting messages from the maps channel:
+    #    fixed_channel = ctx.bot.get_channel(790326235615592458)
+    #    async for msg in fixed_channel.history(limit=limit):
+    #        #{'footer': {'text': 'How to download? (look at the chanel "tuto")'},
+    #        #'image': {'url': 'https://i1.wp.com/www.pozzo-live.com/wp-content/uploads/2020/11/123987181_10158117518049032_1805713449174542166_o.jpg?ssl=1', 'proxy_url': 'https://images-ext-1.discordapp.net/external/diFTeaQxBlYCYHZKSFwo6hm4LVN0sLupYC9Vmt_iy3Y/%3Fssl%3D1/https/i1.wp.com/www.pozzo-live.com/wp-content/uploads/2020/11/123987181_10158117518049032_1805713449174542166_o.jpg',
+    #        #    'width': 2048, 'height': 2048}, 'author': {'name': 'Difficulty : 5 & 7 & 10'}, 'color': 15662848, 'type': 'rich', i
+    #        #'description': 'by Skeelie', 'url': 'https://cloud.ghosthub.fr/s/xRaojKCYbZ3ibBj', 'title': 'System Of A Down - Genocidal Humanoidz'}
+    #        if msg.embeds:
+    #            d_embed = msg.embeds[0].to_dict()
+    #            if not isinstance(d_embed, dict):
+    #                # Must not be a map :
+    #                print(d_embed)
+    #                continue
+    #            if not d_embed.get('title'):
+    #                # Sometimes, there are weird maps with some missing metadatas : 
+    #                    #{'footer': {'text': 'How to download? (look at the chanel "tuto")'}, 'image': {'url': 'https://images.genius.com/97025d7ad6f33049688ada91b3a35368.1000x1000x1.jpg', 'proxy_url': 'https://images-ext-2.discordapp.net/external/2P8Z9cAbv6qZuCjWT8V-UxNES9SXHdZ6otHQQGuTM6M/https/images.genius.com/97025d7ad6f33049688ada91b3a35368.1000x1000x1.jpg', 'width': 1000, 'height': 1000}, 'author': {'name': 'AJR-Beats', 'url': 'https://cloud.ghosthub.fr/s/sbS3Hy9xf7638Za'}, 'color': 15662848, 'type': 'rich', 'description': 'by 4FriendZone'}
+    #                print(d_embed)
+    #                continue
+    #            map_band_title = d_embed['title'].split('-')
+    #            if len(map_band_title) < 2:
+    #                # Some maps have strange '–' instead of '-' as separator
+    #                map_band_title = d_embed['title'].split('–')
+    #            map_band = map_band_title[0].strip()
+    #            # In case there was a '-' in the name of the map, we join it back
+    #            map_title = '-'.join(map_band_title[1:])
+    #            map_title = map_title.strip()
+    #            map_diffs = d_embed['author']['name'].split(':')[1].split('&')
+    #            map_mapper = d_embed['description'].split('by')[1].strip()
+    #            for diff in map_diffs:
+    #                print(map_band, map_title, map_mapper, diff.strip())
+    #                # Now that we have all infos, we actually add the maps
+    #                await self.newmap(ctx, map_title, map_band, map_mapper, diff.strip())
 
 
 def setup(bot):
