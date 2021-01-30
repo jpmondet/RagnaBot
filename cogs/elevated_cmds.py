@@ -120,7 +120,7 @@ this word in the name")
         delete_pending_submission(valid_score)
 
         # Check if a score already exists for this map & player
-        old_score = get_score_by_player_id_map_uuid_diff(valid_score['player_id'], valid_score['map_uuid'], valid_score['difficulty'])
+        old_score = get_score_by_player_id_map_uuid_diff(valid_score['player_id'], valid_score['map_uuid'], valid_score['difficulty_played'])
         if old_score:
             print(old_score)
             if score < float(old_score['score']):
@@ -131,8 +131,8 @@ this word in the name")
 
         misses: int = int(valid_score['misses'])
         triggers: int = int(valid_score['triggers'])
-        score: float = float(valid_score['total_score'])
-        perfects_percent: float = float(valid_score['total_score'])
+        score: float = float(valid_score['score'])
+        perfects_percent: float = float(valid_score['perfects_percent'])
 
         if old_score:
             misses -= int(old_score['misses'])
@@ -143,15 +143,13 @@ this word in the name")
         player_id: int = valid_score['player_id']
         account: Dict[str, Any] = get_account_by_player_id(player_id)
 
-        total_misses: int = int(account['total_misses']) + misses
-        total_triggers: int = int(account['total_triggers']) + triggers
-        total_score: float = float(account['total_score']) + score
-        perfects_percent_total: float = float(account['perfects_percent_total']) + perfects_percent
+        account['total_misses'] = int(account['total_misses']) + misses
+        account['total_triggers'] = int(account['total_triggers']) + triggers
+        account['total_score'] = float(account['total_score']) + score
+        account['total_perfects_percent'] = float(account['total_perfects_percent']) + perfects_percent
 
-        update_account_by_player_id(player_id, 'total_misses', total_misses)
-        update_account_by_player_id(player_id, 'total_triggers', total_triggers)
-        update_account_by_player_id(player_id, 'total_score', total_score)
-        update_account_by_player_id(player_id, 'perfects_percent_total', perfects_percent_total)
+        del(account['_id'])
+        update_multiple_value_on_account_by_player_id(player_id, account)
 
         output: str = "Score is correctly saved and leaderboards are correctly updated."
         for message in paginate(output):
