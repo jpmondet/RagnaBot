@@ -17,37 +17,24 @@ class Players(commands.Cog):
     @commands.before_invoke(record_usage)
     async def top(self, ctx, nb_to_show: int = 10):
     
-        for message in paginate("Not totally implemented Yet (only checks total score over all maps for now)"):
-            msg_to_send = ''.join(message)
-            await ctx.send(msg_to_send)
-    
-        print("Force update all players before showing top")
-
-        players_details: List[Dict[str, Any]] = []
-        with open(PLAYERS_DETAILS) as pfile:
-            players_details = json.load(pfile)
-        for pdetails in players_details:
-            await self.playerstats(ctx, pdetails['name'], False)
-    
-        print("Ok, starting to get overall leaderboard")
+        accounts = list(get_accounts())
 
         top_players: str = "\n"
     
-        with open(PLAYERS_DETAILS) as pfile:
-            players_details = json.load(pfile)
-
-        if len(players_details) <= nb_to_show:
-            nb_to_show = len(players_details)
+        if len(accounts) <= nb_to_show:
+            nb_to_show = len(accounts)
     
         print("Nb players to show:", nb_to_show)
 
-        sorted_players = sorted(players_details, key=lambda k: float(k['total_score']), reverse=True)
+        sorted_accs = sorted(accounts, key=lambda k: float(k['total_score']), reverse=True)
         
-        for rank, pdetails in enumerate(sorted_players):
+        for rank, account in enumerate(sorted_accs):
             if nb_to_show <= 0:
                 break
-            print(rank, pdetails)
-            top_players += f"{str(rank+1)} - {pdetails['name']} : {pdetails['total_score']:.2f}\n"
+            print(rank, account)
+            nb_player_scores = len(list(get_scores_by_player_id(account['player_id'])))
+            perfects_percent_avg: float = account['total_perfects_percent'] / nb_player_scores
+            top_players += f"{str(rank+1)} - {account['player_name']} : {account['total_score']:.2f} ({str(account['total_misses'])} misses, {str(perfects_percent_avg)}%, {str(account['total_triggers'])} triggers) \n"
             nb_to_show -= 1
     
         for message in paginate(top_players):
@@ -64,35 +51,35 @@ class Players(commands.Cog):
 
         print("Starting to get map leaderboard")
     
-        custom_songs: List[Dict[str, Any]] = []
-        with open(CUSTOM_SONGS) as csfile:
-            custom_songs = json.load(csfile)
-    
-        matching_songs: List[Dict[str, Any]] = []
-        for cs in custom_songs:
-            if map_name.lower() in cs['full_name'].lower():
-                matching_songs.append(cs)
-    
-        print("Found matching songs:", matching_songs)
-        names_songs =  ',\n\t'.join([cs['full_name'] for cs in matching_songs])
-        match_str: str= f"Your request matched these songs :\n\t{names_songs}. \n \
-    \nHere are the associated leaderboards : \n\n"
-        print(match_str)
-    
+        matching_songs = list(search_map_by_pattern(map_name))
+
+        if len(matching_songs) > 1:
+            await ctx.send("We found more than 1 maps with your pattern, showing only the first")
+        
+        matching_song: Dict[str, Any] = matching_songs[0]
+
         leaders: str = ""
         nb_to_show_temp: int = 0
-        for cs in matching_songs:
-            leaders += f"{cs['full_name']}: \n"
-            if len(cs['leaderboard']) <= nb_to_show:
-                nb_to_show_temp = len(cs['leaderboard'])
-            for rank, player in enumerate(cs['leaderboard']):
+
+        song_name = f"{matching_song['artist']} - {matching_song['title']} - {matching_song['ownerUsername']}"
+
+        for difficulty in matching_song['difficulty'].split(','):
+            map_scores_unsorted = list(get_score_by_map_uuid_and_diff(matching_song['uuid'], difficulty))
+            print(map_scores_unsorted)
+            map_scores = sorted(map_scores_unsorted, key=lambda k: k['score'], reverse=True)
+    
+            leaders += f"{song_name} - Level {difficulty}: \n"
+            if len(map_scores) <= nb_to_show:
+                nb_to_show_temp = len(map_scores)
+            for rank, map_score in enumerate(map_scores):
+                account = get_account_by_player_id(map_score['player_id'])
                 if nb_to_show_temp <= 0:
                     break
-                leaders += f"        {str(rank+1)} - {player['player_name']} - {player['score']} ({str(player['misses'])} misses, {str(player['perfects_percent'])}%, {str(player['triggers'])} triggers) \n"
+                leaders += f"        {str(rank+1)} - {account['player_name']} - {map_score['score']} ({str(map_score['misses'])} misses, {str(map_score['perfects_percent'])}%, {str(map_score['triggers'])} triggers) \n"
                 nb_to_show_temp -= 1
             leaders += "\n"
     
-        for message in paginate(match_str + leaders):
+        for message in paginate(leaders):
             msg_to_send = ''.join(message)
             await ctx.send(msg_to_send)
     
@@ -123,7 +110,7 @@ class Players(commands.Cog):
             "player_id": id_player,
             "player_name": player_name,
             "total_misses": 0,
-            "perfects_percent_avg": 0,
+            "total_perfects_percent": 0.0,
             "total_score": 0,
             "total_triggers": 0,
         }
@@ -189,76 +176,47 @@ class Players(commands.Cog):
     
     @commands.command(name='playerstats', help='Get overall stats of a player')
     @commands.before_invoke(record_usage)
-    async def playerstats(self, ctx, player_name: str = "", called_as_cmd: bool = True):
-    
-        if called_as_cmd:
-            for message in paginate("Not totally implemented Yet"):
-                msg_to_send = ''.join(message)
-                await ctx.send(msg_to_send)
-    
+    async def playerstats(self, ctx, player_name: str = ""):
+
         print("Starting to get player stats")
 
+        account: Dict[str, Any] = None
         if not player_name:
             print("Player name not in parameter. We look for the author of the message")
-            id_accounts = load_accounts()
-            player_name = id_accounts.get(str(ctx.author.id))
-            print(f"Ok, the author is registered as {player_name}")
-    
-        if not player_name:
-            await ctx.send('Player not registered and no player name chosen. Please use `!register "YOUR_INGAME_NAME"` (yeah, with **quotes** ^^) to register.\n \
-or simply choose someone, for example : `!playerstats "OMDN | Gneuh [knee-uh]"`')
-            return
-    
-        players_details: List[Dict[str, Any]] = []
-        with open(PLAYERS_DETAILS) as pfile:
-            players_details = json.load(pfile)
+            account = get_account_by_discord_id(ctx.author.id)
+            if not account:
+                await ctx.send('Player not registered and no player name chosen. Please use `!register "YOUR_INGAME_NAME"` (yeah, with **quotes** ^^) to register.\n \
+    or simply choose someone, for example : `!playerstats "OMDN | Gneuh [knee-uh]"`')
+                return
+            print(f"Ok, the author is registered as {account['player_name']}")
+        else:
+            # We search for the player passed in param
+            accounts = list(search_account_by_name(player_name))
+            if not accounts:
+                await ctx.send("No player found with that pattern, sorry")
+                return
+            if len(accounts) > 1:
+                await ctx.send('Your request found more than 1 player. Please be more specific')
+                return
+            account = accounts[0]
+
+        nb_player_scores = len(list(get_scores_by_player_id(account['player_id'])))
 
         pstats_str: str = ""
-        total_score: float = 0
-        total_misses: int = 0
-        perfects_percent: float = 0
-        perfects_percent_avg: float = 0
-        total_triggers: int = 0
-        for pdetails in players_details:
-            if pdetails['name'] == player_name:
-                print(f"{player_name} found")
-                # Updating 
-                #TODO: Also update top1s & top10s
-                if not pdetails['maps_played']:
-                    print(f"No scores found for {pdetails}")
-                    pstats_str = f"No scores found for {player_name}"
-                    break
-                for mapp in pdetails['maps_played']:
-                    total_score += float(mapp["score"])
-                    total_misses += int(mapp["misses"])
-                    perfects_percent += float(mapp["perfects_percent"])
-                    total_triggers += int(mapp["triggers"])
-                pdetails["total_score"] = total_score
-                pdetails["total_misses"] = total_misses
-                perfects_percent_avg = perfects_percent / len(pdetails['maps_played'])
-                pdetails["perfects_percent_avg"] = perfects_percent_avg
-                pdetails["total_triggers"] = total_triggers
-                pstats_str =  f'{player_name}\n\t \
-Total score: {total_score},\n\t \
+        total_score: float = account['total_score']
+        total_misses: int = account['total_misses']
+        perfects_percent_avg: float = account['total_perfects_percent'] / nb_player_scores
+        total_triggers: int = account['total_triggers']
+        pstats_str =  f"{account['player_name']}\n\t \
+Total score: {total_score:.2f},\n\t \
 Total misses: {total_misses},\n\t \
 Total triggers: {total_triggers},\n\t \
-Perfects percent average: {perfects_percent_avg}'
-                print(pstats_str)
+Perfects percent average: {perfects_percent_avg:.2f}"
+        print(pstats_str)
     
-        if not pstats_str:
-            await ctx.send(f'Hmmm, **{player_name}** not found :thinking:  Am I bugged? :upside_down: Or are you? xD')
-            return
-        
-        with open(PLAYERS_DETAILS, 'w') as csfile:
-            json.dump(players_details, csfile)
-    
-        print("Player updated:", player_name)
-
-    
-        if called_as_cmd:
-            for message in paginate(pstats_str):
-                msg_to_send = ''.join(message)
-                await ctx.send(msg_to_send)
+        for message in paginate(pstats_str):
+            msg_to_send = ''.join(message)
+            await ctx.send(msg_to_send)
         
     
     @commands.command(name='listmaps', help='List all maps')
@@ -581,6 +539,7 @@ For example : `!cancelsub 2`')
             return
 
         psub_to_cancel = pendings[id_submission - 1]
+        del(psub_to_cancel['_id'])
 
         print("Sub to cancel", psub_to_cancel)
         delete_pending_submission(psub_to_cancel)
