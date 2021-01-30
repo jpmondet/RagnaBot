@@ -2,4 +2,5 @@ bandit
 black
 mypy
 pylint
+pytest
 -r requirements.txt
