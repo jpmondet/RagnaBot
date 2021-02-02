@@ -34,30 +34,6 @@ class Moderators(commands.Cog):
             msg_to_send = ''.join(message)
             await ctx.send(msg_to_send)
 
-    @commands.command(name='searchplayer', help='Search a player by name')
-    @commands.has_any_role(*ROLE_ADMIN)
-    @commands.before_invoke(record_usage)
-    async def search_players(self, ctx, name_to_find: str = ""):
-
-        if not name_to_find:
-            await ctx.send("Please specify a word to find. For exemple !searchplayer gneuh should find the player with \n \
-this word in the name")
-            return
-
-        players_found = search_account_by_name(name_to_find)
-
-        all_players = ""
-        for acc in players_found:
-            all_players += f"{acc['player_name']}\n"
-
-        if not all_players:
-            await ctx.send("No player found with that pattern, sorry")
-            return
-
-        for message in paginate(all_players):
-            msg_to_send = ''.join(message)
-            await ctx.send(msg_to_send)
-
     @commands.command(name='listpending', help='List pending scores')
     @commands.has_any_role(*ROLE_ADMIN)
     @commands.before_invoke(record_usage)
