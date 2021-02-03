@@ -3,7 +3,7 @@ import discord
 from discord.ext import commands
 
 import compute.middle_layer as cml
-from utils.bot_utils import paginate, record_usage
+from utils.bot_utils import paginate, record_usage, send_not_registered_message
 
 #TODO: utils func to check parameter entered by players (especially on submissions)
 
@@ -110,7 +110,7 @@ class Players(commands.Cog):
 
         str_returned = cml.get_player_stats(ctx.author.id, player_name)
         if not str_returned and not player_name:
-            await ctx.send('Player not registered and no player name chosen. Please use `!register "YOUR_INGAME_NAME"` (yeah, with **quotes** ^^) to register.\n \
+            await ctx.send('Player not registered and no player name chosen. Please use `!register "YOUR_INGAME_NAME"` (yeah, with **quotes** ^^) to register.\n'
             return
         elif not str_returned and player_name:
             await ctx.send("No player found with that pattern, sorry")
@@ -163,11 +163,11 @@ You can use !searchmap to find exactly what you need to copy/paste for !submit")
             msg_to_send = ''.join(message)
             await ctx.send(msg_to_send)
     
-    @commands.command(name='submit', help='Submit a new score with all the details. \n \
+    @commands.command(name='submit-by-map-name', help='Submit a new score with all the details. \n \
     !submit proof map_name band mapper difficulty score misses perfects_percent triggers \n \
     Exple: `!submit https://image-or-video-proof.rocks Vodka Korpiklaani Vred 6 7777 1 99 3`')
     @commands.before_invoke(record_usage)
-    async def submit(
+    async def submit_by_map_name(
             self,
             ctx,
             proof: str = "",
@@ -182,95 +182,13 @@ You can use !searchmap to find exactly what you need to copy/paste for !submit")
         ):
     
         print("Validating args")
-        account = get_account_by_discord_id(ctx.author.id)
-        if not account:
-            await ctx.send('Player not registered. Please use `!register "YOUR_INGAME_NAME"` (yeah, with **quotes** ^^) to register.\n \
-    Exple : `!register "OMDN | Gneuh [knee-uh]"`')
+        if not cml.check_if_registered(ctx.author.id):
+            send_not_registered_message(ctx.send)
             return
-    
-        if not proof or not map_name or not band or not mapper or not difficulty or not score or not misses or not perfects_percent or not triggers:
-            await ctx.send("Please fill all the field so admins can verify your submission easily :-). \n \
-    Your submission should look like : !submit proof map_name band mapper difficulty score misses perfects_percent triggers \n \
-    For example : `!submit https://image-or-video-proof.rocks Vodka Korpiklaani Vred 5 7777 1 99 3`")
-            return
-
         try:
-            try_d = int(difficulty)
-            if try_d < 1 or try_d > 20:
-                raise ValueError
-        except ValueError:
-            await ctx.send("Difficulty should be a number between 1 and...20? ;-)")
-            return
-
-        try:
-            try_d = float(score)
-            if try_d < 0:
-                raise ValueError
-        except ValueError:
-            await ctx.send("Score should be a number (can be decimal) and be positive ;-)")
-            return
-
-        try:
-            try_d = int(misses)
-            if try_d < 0:
-                raise ValueError
-        except ValueError:
-            await ctx.send("Misses should be a number and be positive ;-)")
-            return
-
-        try:
-            try_d = int(triggers)
-            if try_d < 0:
-                raise ValueError
-        except ValueError:
-            await ctx.send("Triggers should be a number and be positive ;-)")
-            return
-
-        try:
-            try_d = float(perfects_percent)
-            if try_d < 0:
-                raise ValueError
-        except ValueError:
-            await ctx.send("Perfects percentage should be a number (can be decimal) and be positive ;-)")
-            return
-    
-        map_submitted = list(search_map_by_title_artist_mapper(map_name, band, mapper))
-        if not map_submitted:
-            await ctx.send("Sorry, not maps were found with those artist/title/mapper. Please try to search your map with `!searchmap 'anything'` before submitting")
-            return
-
-        if len(map_submitted) > 1:
-            await ctx.send("Hmm, looks like there are multiple maps with those artist/title/mapper.  \n \
-                    Please try to search your map with `!searchmap 'anything'` to submit with uuid instead")
-            return
-
-        map_submitted = map_submitted[0]
-
-        # Is difficulty submitted really coherent?
-        if str(difficulty) not in map_submitted['difficulty']:
-            await ctx.send(f"Sorry, the map's difficulty you submitted doesn't exist. This map only have those : {map_submitted['difficulty']}") 
-            return
-
-        # We take this chance to update player_discord_name because
-        # we may not have it already (or it could have changed)
-        player_id = account['player_id']
-        discord_name = ctx.author.name
-        update_account_by_player_id(player_id, 'discord_name', discord_name)
-
-        # Ok submission seems valid from the backend point of view
-        # We push it to admins to verify the proof 
-        # (can't identify anything on an image or video for now xD )
-        submission: Dict[str, Any] = {}
-        submission['map_uuid'] = map_submitted['uuid']
-        submission['player_id'] = player_id
-        submission['difficulty_played'] = difficulty
-        submission['score'] = score
-        submission['misses'] = misses
-        submission['perfects_percent'] = perfects_percent
-        submission['triggers'] = triggers
-        submission['proof'] = proof
-
-        add_pending_submission(submission)
+            cml.handle_player_submission()
+        except AttributeError as ae:
+            await ctx.send(str(ae))
     
         await ctx.send("Your request is correctly submitted. Please wait for an admin to verify your submission")
 
@@ -297,6 +215,8 @@ You can use !searchmap to find exactly what you need to copy/paste for !submit")
             await ctx.send('Player not registered. Please use `!register "YOUR_INGAME_NAME"` (yeah, with **quotes** ^^) to register.\n \
     Exple : `!register "OMDN | Gneuh [knee-uh]"`')
             return
+        
+    
     
         if not proof or not uuid or not difficulty or not score or not misses or not perfects_percent or not triggers:
             await ctx.send("Please fill all the field so admins can verify your submission easily :-). \n \
