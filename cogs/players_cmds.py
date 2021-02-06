@@ -3,7 +3,7 @@ import discord
 from discord.ext import commands
 
 import compute.middle_layer as cml
-from utils.bot_utils import paginate, record_usage, send_not_registered_message
+from utils.bot_utils import paginate, record_usage, check_if_registered
 
 #TODO: utils func to check parameter entered by players (especially on submissions)
 
@@ -28,7 +28,7 @@ class Players(commands.Cog):
 
         print("Starting to get map leaderboard")
 
-        leaders: str, nb_songs: int = cml.get_top_players_on_specific_map(map_name, nb_to_show)
+        leaders, nb_songs = cml.get_top_players_on_specific_map(map_name, nb_to_show)
 
         if not nb_songs:
             await ctx.send('Sorry, no maps were found with this pattern')
@@ -110,7 +110,7 @@ class Players(commands.Cog):
 
         str_returned = cml.get_player_stats(ctx.author.id, player_name)
         if not str_returned and not player_name:
-            await ctx.send('Player not registered and no player name chosen. Please use `!register "YOUR_INGAME_NAME"` (yeah, with **quotes** ^^) to register.\n'
+            await ctx.send('Player not registered and no player name chosen. Please use `!register "YOUR_INGAME_NAME"` (yeah, with **quotes** ^^) to register.\n')
             return
         elif not str_returned and player_name:
             await ctx.send("No player found with that pattern, sorry")
@@ -139,10 +139,13 @@ this word in the name")
             msg_to_send = ''.join(message)
             await ctx.send(msg_to_send)
         
+        return
+        
     
     @commands.command(name='listmaps', help='List all maps')
     @commands.before_invoke(record_usage)
     async def list_maps(self, ctx):
+
         await ctx.send("All maps 'scorable' are now from https://ragnasong.com ;-) \n \
 You can use !searchmap to find exactly what you need to copy/paste for !submit")
 
@@ -167,6 +170,7 @@ You can use !searchmap to find exactly what you need to copy/paste for !submit")
     !submit proof map_name band mapper difficulty score misses perfects_percent triggers \n \
     Exple: `!submit https://image-or-video-proof.rocks Vodka Korpiklaani Vred 6 7777 1 99 3`')
     @commands.before_invoke(record_usage)
+    @commands.check(check_if_registered)
     async def submit_by_map_name(
             self,
             ctx,
@@ -182,9 +186,6 @@ You can use !searchmap to find exactly what you need to copy/paste for !submit")
         ):
     
         print("Validating args")
-        if not cml.check_if_registered(ctx.author.id):
-            send_not_registered_message(ctx.send)
-            return
         try:
             cml.handle_player_submission()
         except AttributeError as ae:
