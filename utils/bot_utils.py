@@ -2,42 +2,13 @@
 
 #! /usr/bin/env python3
 
-from os import getenv
-from json import load as jload
-from typing import Dict, List, Any
-from pymongo import MongoClient, ASCENDING as MDBASCENDING
+from typing import List, Dict, Any
+from compute.middle_layer import check_if_registered as cml_check_if_registered
 
-from dotenv import load_dotenv
-
-load_dotenv()
-
-TOKEN: str = getenv("DISCORD_TOKEN")
-GUILD: str = getenv('DISCORD_GUILD').split(',')
-CHANNEL: str = getenv('DISCORD_CHANNEL').split(',')
-ROLE_ADMIN: str = getenv('RAGNABOT_ROLE_ADMIN').split(',')
-CMD_PREFIX: str = getenv("RAGNABOT_CMD_PREFIX")
-DB_STRING: str = getenv("RAGNABOT_DB")
-RAGNASONG_URL: str = "https://ragnasong.com/api/"
-RAGNASONG_MAPS: str = RAGNASONG_URL + "/searchMap/?start={}&dificulty="
-
-CUSTOM_SONGS: str = "custom_songs.json"
-PLAYERS_DETAILS: str = "players.json"
-PENDING_SCORES: str = "pending_scores.json"
-ACCOUNTS: str = "id_accounts_list.json"
-
-DB_CLIENT = MongoClient(DB_STRING)
-DB = DB_CLIENT.ragnabot
-
-CUSTOM_SONGS_COLLECTION = DB.csongs
-LBOARDS_COLLECTION = DB.cslboards
-PENDING_SCORES_COLLECTION = DB.pending
-ACCOUNTS_COLLECTION = DB.accounts
-INDEX_SEQUENCE = DB.index_seq
-
-def paginate(lines, prefix='```css\n', suffix='```', chars=1850):
+def paginate(lines: List[str], prefix: str = '```css\n', suffix: str = '```', chars=1850) -> str :
     """ Paginate long outputs since discord limits to 2000 chars... """
-    size = 0
-    message = [prefix]
+    size: int = 0
+    message: List[str] = [prefix]
     for line in lines:
         if len(line) + size > chars:
             message.append(suffix)
@@ -51,3 +22,8 @@ def paginate(lines, prefix='```css\n', suffix='```', chars=1850):
 
 async def record_usage(instance, ctx):
     print(f"[{instance}] {ctx.author} asked for {ctx.message.content} on chan {ctx.channel} of {ctx.guild} at {ctx.message.created_at}")
+
+async def check_if_registered(ctx):
+    ret = cml_check_if_registered(ctx.author.id)
+    print(ret)
+    return ret
