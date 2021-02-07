@@ -4,19 +4,62 @@ that can be (and should be) abstracted """
 #! /usr/bin/env python3
 
 from re import compile as rcompile, IGNORECASE as rIGNORECASE
+from typing import List, Dict, Any
+from os import access, R_OK
+from json import load as jload
+from json.decoder import JSONDecodeError
 
-from utils.bot_utils import *
+from pymongo import MongoClient, ASCENDING as MDBASCENDING
 from pymongo.errors import BulkWriteError, DuplicateKeyError as MDDPK
 from requests import get as rget
+
+from utils.env import DB_STRING, RAGNASONG_MAPS, RAGNASONG_URL
+
+DB_CLIENT = MongoClient(DB_STRING)
+DB = DB_CLIENT.ragnabot
+CUSTOM_SONGS_COLLECTION = DB.csongs
+LBOARDS_COLLECTION = DB.cslboards
+PENDING_SCORES_COLLECTION = DB.pending
+ACCOUNTS_COLLECTION = DB.accounts     
+INDEX_SEQUENCE = DB.index_seq
+
+CUSTOM_SONGS: str = "custom_songs.json"
+PLAYERS_DETAILS: str = "players.json"
+PENDING_SCORES: str = "pending_scores.json"
+ACCOUNTS: str = "id_accounts_list.json"
+
+def safe_load_json_file(filename: str):
+    if not access(filename, R_OK):
+        return None
+
+    datas: List[Dict[str, Any]] = None
+    try:
+        with open(filename, 'r') as fp:
+            datas = jload(fp)
+    except JSONDecodeError:
+        return None
+
+    return datas
+
 
 def prep_db_if_not_exist():
     """ If db is empty, with try to fill it with flat json files we may have from previous
     iterations. """
+    
+    if (
+        list(CUSTOM_SONGS_COLLECTION.find())
+        and list(LBOARDS_COLLECTION.find())
+        and list(ACCOUNTS_COLLECTION.find())
+        and list(PENDING_SCORES_COLLECTION.find())
+    ):
+        # Looks like everything is already migrated
+        # Leaving :)
+        return
+
 
     print("Preping db with flat files since at least one collection is empty")
 
-    with open(PENDING_SCORES, 'r') as fp:
-        pendings = jload(fp)
+    pendings = safe_load_json_file(PENDING_SCORES)
     if pendings:
         PENDING_SCORES_COLLECTION.insert_many(pendings)
 
@@ -31,8 +74,6 @@ def prep_db_if_not_exist():
     # Leaderboards are lil' more specific since they were stored in customs
     # Thus we have to do more processing here to extract lboards
     if not list(LBOARDS_COLLECTION.find()) or not list(CUSTOM_SONGS_COLLECTION.find()):
-        with open(CUSTOM_SONGS, 'r') as fp:
-            csongs = jload(fp)
 
         # We leverage this migration to use data from 
         # Ragnasong website
@@ -55,44 +96,44 @@ def prep_db_if_not_exist():
                 print(bwe)
                 return
 
+        csongs = safe_load_json_file(CUSTOM_SONGS)
 
-        # We try to get the old leaderboards to map them to the new source of truth is possible
-        for cs in csongs:
-            if cs['leaderboard']:
-                rsmap: Dict[str, Any] = get_map_by_name(cs['name'], cs['band'])
-                if not rsmap:
-                    print(cs)
-                    continue
+        if csongs:
+            # We try to get the old leaderboards to map them to the new source of truth is possible
+            for cs in csongs:
+                if cs['leaderboard']:
+                    rsmap: Dict[str, Any] = get_map_by_name(cs['name'], cs['band'])
+                    if not rsmap:
+                        print(cs)
+                        continue
 
-                # Instead of storage a list, we use the power of mongodb and just store records 
-                # Should help later to retrieve just what's needed and not the whole list
-                for score in cs['leaderboard']:
-                    lb_to_add = score.copy()
-                    lb_to_add['map_uuid'] = rsmap['uuid']
-                    LBOARDS_COLLECTION.insert_one(lb_to_add)
+                    # Instead of storage a list, we use the power of mongodb and just store records 
+                    # Should help later to retrieve just what's needed and not the whole list
+                    for score in cs['leaderboard']:
+                        lb_to_add = score.copy()
+                        lb_to_add['map_uuid'] = rsmap['uuid']
+                        LBOARDS_COLLECTION.insert_one(lb_to_add)
 
     if not list(ACCOUNTS_COLLECTION.find()):
-        with open(ACCOUNTS, 'r') as fp:
-            acc = jload(fp)
+        acc = safe_load_json_file(ACCOUNTS)
+        players_details = safe_load_json_file(PLAYERS_DETAILS)
 
-        with open(PLAYERS_DETAILS, 'r') as fp:
-            players_details = jload(fp)
+        if acc and players_details:
+            player_name_id = {}
+            for pdetails in players_details:
+                # We keep it temporary in player_name_id to migrate it to account just after
+                pdetails['id'] = get_last_index_from_index_sequence()
+                player_name_id[pdetails['name']] = pdetails
 
-        player_name_id = {}
-        for pdetails in players_details:
-            # We keep it temporary in player_name_id to migrate it to account just after
-            pdetails['id'] = get_last_index_from_index_sequence()
-            player_name_id[pdetails['name']] = pdetails
-
-        # Take the chance to update the dict to be mongodb-friendly 
-        # by adding an id instead of using a value as key
-        acc_updated = []
-        for discord_id, player_name in acc.items():
-            pdetails = player_name_id[player_name]
-            acc_updated.append(
-                    {'discord_id': discord_id, 
-                        'player_id': pdetails['id'], 'player_name': player_name, 'total_misses': pdetails['total_misses'], 'total_perfects_percent': pdetails['perfects_percent_avg'], 'total_score': pdetails['total_score'], 'total_triggers': pdetails['total_triggers']})
-        ACCOUNTS_COLLECTION.insert_many(acc_updated)
+            # Take the chance to update the dict to be mongodb-friendly 
+            # by adding an id instead of using a value as key
+            acc_updated = []
+            for discord_id, player_name in acc.items():
+                pdetails = player_name_id[player_name]
+                acc_updated.append(
+                        {'discord_id': discord_id, 
+                            'player_id': pdetails['id'], 'player_name': player_name, 'total_misses': pdetails['total_misses'], 'total_perfects_percent': pdetails['perfects_percent_avg'], 'total_score': pdetails['total_score'], 'total_triggers': pdetails['total_triggers']})
+            ACCOUNTS_COLLECTION.insert_many(acc_updated)
 
     # Now that we have migrated all data, we suppress redondant datas that are still in leaderboards collection
     scores = get_entire_collection(LBOARDS_COLLECTION)
@@ -171,9 +212,9 @@ def search_account_by_name(player_name: str):
 def search_map_by_title_artist_mapper(title: str, artist: str, mapper: str) -> List[Dict[str, Any]]:
     return CUSTOM_SONGS_COLLECTION.find( {
             "$and": [
-                { 'title': rcompile(pattern, rIGNORECASE)},
-                { 'artist': rcompile(pattern, rIGNORECASE)},
-                { 'ownerUsername': rcompile(pattern, rIGNORECASE)},
+                { 'title': rcompile(title, rIGNORECASE)},
+                { 'artist': rcompile(artist, rIGNORECASE)},
+                { 'ownerUsername': rcompile(mapper, rIGNORECASE)},
             ]
             })
 
