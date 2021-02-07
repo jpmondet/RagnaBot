@@ -56,12 +56,11 @@ class Players(commands.Cog):
     If you wanna unregister, please use `!unregister YEAHIMSURE!` (but your scores will be deleted as well, be careful ! ^^)")
             return
     
-        for message in paginate("Ok, you're correctly registered :-)"):
-            msg_to_send = ''.join(message)
-            await ctx.send(msg_to_send)
+        await ctx.send("Ok, you're correctly registered :slight_smile:")
     
     @commands.command(name='unregister', help='Unregister from everything (including your previous scores\n \
     If you wanna unregister, please use `!unregister YEAHIMSURE!` (but your scores will be deleted as well, be careful ! ^^)')
+    @commands.check(check_if_registered)
     @commands.before_invoke(record_usage)
     async def unregister(self, ctx, confirm: str = ""):
     
@@ -69,19 +68,15 @@ class Players(commands.Cog):
             await ctx.send(f"{ctx.author.name} didn't confirm, cancelling (send `!unregister YEAHIMSURE!` to confirm)")
             return
     
-        already_registered: str = cml.unregistering_player(ctx.author.id)
-        if not already_registered:
-            await ctx.send(f"Uh? Looks like you're not registered xD")
-            return
-        
-        player_name = already_registered
-
-        for message in paginate(f"Byee, no more scores from {player_name} :'("):
-            msg_to_send = ''.join(message)
-            await ctx.send(msg_to_send)
+        player_name_unregistered = cml.unregistering_player(ctx.author.id)
+        if player_name_unregistered:  
+            await ctx.send(f"Byee, no more scores from {player_name_unregistered} :'(")
+        else:
+            await ctx.send("Hmm, looks like there was an issue unregistering :thinking:")
     
     
     @commands.command(name='rename', help='Change your in-game name on all the leaderboards & stuff')
+    @commands.check(check_if_registered)
     @commands.before_invoke(record_usage)
     async def rename(self, ctx, new_name: str = ""):
     
@@ -90,16 +85,11 @@ class Players(commands.Cog):
     Exple: `!rename "Awesome New Name"`')
             return
     
-        already_registered = cml.rename_player(ctx.author.id, new_name)
-        if not already_registered:
-            await ctx.send('Player isnt registered (or didnt find him xD ), thus cant rename')
-            return
-
-        player_name = already_registered
-    
-        for message in paginate(f"Byee {player_name} and welcome {new_name} :-)"):
-            msg_to_send = ''.join(message)
-            await ctx.send(msg_to_send)
+        old_name = cml.rename_player(ctx.author.id, new_name)
+        if old_name:
+            await ctx.send(f"Byee {old_name} and welcome {new_name} :-)")
+        else:
+            await ctx.send("Hmm, looks like there was an issue unregistering :thinking:")
     
     
     @commands.command(name='playerstats', help='Get overall stats of a player')
@@ -168,7 +158,7 @@ You can use !searchmap to find exactly what you need to copy/paste for !submit")
     
     @commands.command(name='submit-by-map-name', help='Submit a new score with all the details. \n \
     !submit proof map_name band mapper difficulty score misses perfects_percent triggers \n \
-    Exple: `!submit https://image-or-video-proof.rocks Vodka Korpiklaani Vred 6 7777 1 99 3`')
+    Exple: `!submit-by-map-name https://image-or-video-proof.rocks Vodka Korpiklaani Vred 6 7777 1 99 3`')
     @commands.before_invoke(record_usage)
     @commands.check(check_if_registered)
     async def submit_by_map_name(
@@ -185,11 +175,11 @@ You can use !searchmap to find exactly what you need to copy/paste for !submit")
             triggers: str = "",
         ):
     
-        print("Validating args")
         try:
-            cml.handle_player_submission()
+            cml.handle_player_submission(ctx.author.id, ctx.author.name,proof,difficulty,score, misses,perfects_percent,triggers, map_name,band,mapper)
         except AttributeError as ae:
             await ctx.send(str(ae))
+            return
     
         await ctx.send("Your request is correctly submitted. Please wait for an admin to verify your submission")
 
@@ -197,6 +187,7 @@ You can use !searchmap to find exactly what you need to copy/paste for !submit")
     !submit proof uuid difficulty score misses perfects_percent triggers \n \
     Exple: `!submit https://weblink/proof.png 46df5d714b99306e0a31d60970703733c72c3efc 6 7777 1 99 3`')
     @commands.before_invoke(record_usage)
+    @commands.check(check_if_registered)
     async def submit(
             self,
             ctx,
@@ -208,109 +199,23 @@ You can use !searchmap to find exactly what you need to copy/paste for !submit")
             perfects_percent: str = "",
             triggers: str = "",
         ):
-    
-        print("Validating args")
-
-        account = get_account_by_discord_id(ctx.author.id)
-        if not account:
-            await ctx.send('Player not registered. Please use `!register "YOUR_INGAME_NAME"` (yeah, with **quotes** ^^) to register.\n \
-    Exple : `!register "OMDN | Gneuh [knee-uh]"`')
-            return
-        
-    
-    
-        if not proof or not uuid or not difficulty or not score or not misses or not perfects_percent or not triggers:
-            await ctx.send("Please fill all the field so admins can verify your submission easily :-). \n \
-    Your submission should look like : !submit proof uuid difficulty score misses perfects_percent triggers \n \
-    For example : `!submit https://image-or-video-proof.rocks 46df5d714b99306e0a31d60970703733c72c3efc 5 7777 1 99 3`")
-            return
-
         try:
-            try_d = int(difficulty)
-            if try_d < 1 or try_d > 20:
-                raise ValueError
-        except ValueError:
-            await ctx.send("Difficulty should be a number between 1 and...20? ;-)")
+            cml.handle_player_submission(ctx.author.id, ctx.author.name,proof,difficulty,score, misses,perfects_percent,triggers,"","","", uuid)
+        except AttributeError as ae:
+            await ctx.send(str(ae))
             return
-
-        try:
-            try_d = float(score)
-            if try_d < 0:
-                raise ValueError
-        except ValueError:
-            await ctx.send("Score should be a number (can be decimal) and be positive ;-)")
-            return
-
-        try:
-            try_d = int(misses)
-            if try_d < 0:
-                raise ValueError
-        except ValueError:
-            await ctx.send("Misses should be a number and be positive ;-)")
-            return
-
-        try:
-            try_d = int(triggers)
-            if try_d < 0:
-                raise ValueError
-        except ValueError:
-            await ctx.send("Triggers should be a number and be positive ;-)")
-            return
-
-        try:
-            try_d = float(perfects_percent)
-            if try_d < 0:
-                raise ValueError
-        except ValueError:
-            await ctx.send("Perfects percentage should be a number (can be decimal) and be positive ;-)")
-            return
-
-        map_submitted = get_map_by_uuid(uuid)
-        if not map_submitted:
-            await ctx.send("Sorry, not maps were found with this uuid. Please try to search your map with `!searchmap 'anything'`")
-            return
-
-        # Is difficulty submitted really coherent?
-        if str(difficulty) not in map_submitted['difficulty']:
-            await ctx.send(f"Sorry, the map's difficulty you submitted doesn't exist. This map only have those : {map_submitted['difficulty']}") 
-            return
-
-        # We take this chance to update player_discord_name because
-        # we may not have it already (or it could have changed)
-        player_id = account['player_id']
-        discord_name = ctx.author.name
-        update_account_by_player_id(player_id, 'discord_name', discord_name)
-
-        # Ok submission seems valid from the backend point of view
-        # We push it to admins to verify the proof 
-        # (can't identify anything on an image or video for now xD )
-        submission: Dict[str, Any] = {}
-        submission['map_uuid'] = uuid
-        submission['player_id'] = player_id
-        submission['difficulty_played'] = difficulty
-        submission['score'] = score
-        submission['misses'] = misses
-        submission['perfects_percent'] = perfects_percent
-        submission['triggers'] = triggers
-        submission['proof'] = proof
-
-        add_pending_submission(submission)
     
         await ctx.send("Your request is correctly submitted. Please wait for an admin to verify your submission")
 
     @commands.command(name='mysubs', help='Get a list of your pending submissions if there are any')
     @commands.before_invoke(record_usage)
+    @commands.check(check_if_registered)
     async def my_submissions(self, ctx):
 
         output: str = cml.get_pending_subs_player(ctx.author.id)
 
         if isinstance(output, list):
             await ctx.send("Looks like there isn't any pending submission for your account")
-            return
-
-        if not output:
-            await ctx.send('Player not registered. Please use `!register "YOUR_INGAME_NAME"` (yeah, with **quotes** ^^) to register.\n \
-    Exple : `!register "OMDN | Gneuh [knee-uh]"`')
             return
 
         for message in paginate(output):
@@ -321,6 +226,7 @@ You can use !searchmap to find exactly what you need to copy/paste for !submit")
     @commands.command(name='cancelsub', help='Cancel one of your pending submissions by submission id (shown with `!mysubs`) \n \
 For example : `!cancelsub 2`')
     @commands.before_invoke(record_usage)
+    @commands.check(check_if_registered)
     async def cancel_submission(self, ctx, id_submission: int = -1):
 
         if id_submission < 1:
