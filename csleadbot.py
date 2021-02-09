@@ -35,22 +35,25 @@ async def on_command_error(ctx, error):
         await ctx.send("Sorry, this command is not available in DMs.")
         return
     if isinstance(error, commands.errors.CheckFailure):
-        err_str = str(error)
-        command_failed = err_str.split('command')[1].split('failed')[0].strip()
-        print(str(error))
-        print(err_str)
-        print(command_failed)
         if str(error) == "channelerr":
             print(
                 f"[CHANNELERR] {ctx.author} asked for {ctx.message.content} on chan {ctx.channel} of {ctx.guild} at {ctx.message.created_at}"
             )
             return
-        if command_failed in NEED_REGISTER_FUNCS:
-            await ctx.send('Player not registered. Please use `!register "YOUR_INGAME_NAME"` (yeah, with **quotes** ^^) to register.\n \
-Exple : `!register "OMDN | Gneuh [knee-uh]"`')
+        try:
+            # Check if player is registered
+            err_str = str(error)
+            command_failed = err_str.split('command')[1].split('failed')[0].strip()
+            print(str(error))
+            print(err_str)
+            print(command_failed)
+            if command_failed in NEED_REGISTER_FUNCS:
+                await ctx.send('Player not registered. Please use `!register "YOUR_INGAME_NAME"` (yeah, with **quotes** ^^) to register.\n \
+    Exple : `!register "OMDN | Gneuh [knee-uh]"`')
+                return
+        except IndexError:
+            await ctx.send("Sorry, you do not have the correct role for this command.")
             return
-        await ctx.send("Sorry, you do not have the correct role for this command.")
-        return
     if isinstance(error, commands.errors.CommandOnCooldown):
         await ctx.send(
             "Sorry, we have to limit this command to 1 use every 60 seconds..."
