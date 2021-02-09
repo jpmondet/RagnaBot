@@ -39,10 +39,11 @@ def get_top_players(nb_to_show: int) -> str:
             break
         print(rank, account)
         nb_player_scores = len(list(dbl.get_scores_by_player_id(account['player_id'])))
+        nb_songs_played = nb_player_scores
         if not nb_player_scores:
             nb_player_scores = 1
         perfects_percent_avg: float = account['total_perfects_percent'] / nb_player_scores
-        top_players += f"{str(rank+1)} - {account['player_name']} : {account['total_score']:.2f} ({str(account['total_misses'])} misses, {str(perfects_percent_avg)}%, {str(account['total_triggers'])} triggers) \n"
+        top_players += f"{str(rank+1)} - {account['player_name']} : {account['total_score']:.2f} ({str(account['total_misses'])} misses, {str(perfects_percent_avg)}%, {str(account['total_triggers'])} triggers on {str(nb_songs_played)} maps played) \n"
         nb_to_show -= 1
 
     return top_players
@@ -175,13 +176,15 @@ def get_player_stats(discord_id: int = 0, player_name: str = "") -> str:
     pstats_str: str = ""
     total_score: float = account['total_score']
     total_misses: int = account['total_misses']
+    nb_songs_played: int = nb_player_scores
     perfects_percent_avg: float = account['total_perfects_percent'] / nb_player_scores
     total_triggers: int = account['total_triggers']
     pstats_str =  f"{account['player_name']}\n\t \
 Total score: {total_score:.2f},\n\t \
 Total misses: {total_misses},\n\t \
 Total triggers: {total_triggers},\n\t \
-Perfects percent average: {perfects_percent_avg:.2f}"
+Perfects percent average: {perfects_percent_avg:.2f},\n\t \
+On {nb_songs_played} maps played"
     print(pstats_str)
 
     return pstats_str
