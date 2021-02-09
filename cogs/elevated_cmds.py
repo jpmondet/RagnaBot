@@ -3,6 +3,9 @@ import discord
 from discord.ext import commands
 
 from storage.db_layer import *
+import compute.middle_layer as cml
+from utils.bot_utils import paginate, record_usage, check_if_registered
+from utils.env import ROLE_ADMIN
 
 class Moderators(commands.Cog):
     def __init__(self, bot):
@@ -21,7 +24,7 @@ class Moderators(commands.Cog):
         nb_max = perpage * (page - 1) + (perpage + 1)
 
         all_players: str = ""
-        for nb_player, acc in enumerate(get_accounts()):
+        for nb_player, acc in enumerate(cml.search_accounts_by_pattern("")):
             if nb_player + 1 <= nb_min:
                 continue
             if nb_player + 1 >= nb_max:
@@ -39,36 +42,15 @@ class Moderators(commands.Cog):
     @commands.before_invoke(record_usage)
     async def list_pending(self, ctx):
 
-        pendings = get_pending_submissions()
+        output: str = cml.get_pending_subs_player()
 
-        output: str = ""
-
-        for id_req, pdetails in enumerate(pendings):
-            print(id_req, pdetails)
-            map_submitted = get_map_by_uuid(pdetails['map_uuid'])
-            print(map_submitted)
-            account = get_account_by_player_id(pdetails['player_id'])
-            print(account)
-            pdetails_str: str = f"        In-game name: {account['player_name']}" + '\n'
-            pdetails_str += f"        Map played: {map_submitted['artist']} - "
-            pdetails_str += f"{map_submitted['title']} - "
-            pdetails_str += f"{map_submitted['ownerUsername']} "
-            pdetails_str += f"(map uuid: {map_submitted['uuid']})" + '\n'
-            pdetails_str += f"        score: {pdetails['score']} - "
-            pdetails_str += f"misses: {pdetails['misses']} - "
-            pdetails_str += f"perfects_percent: {pdetails['perfects_percent']} - "
-            pdetails_str += f"triggers: {pdetails['triggers']}" + "\n"
-            pdetails_str += f"        proof: {pdetails['proof']}" + "\n"
-            print(pdetails_str)
-            output = f"{id_req + 1} :     Discord user that submitted: {account['discord_name']}\n{pdetails_str}\n"
-            for message in paginate(output):
-                msg_to_send = ''.join(message)
-                await ctx.send(msg_to_send)
-
-        if not output:
-            await ctx.send("Looks like there isn't any pending submission, you're good to go :+1:")
+        if isinstance(output, list):
+            await ctx.send("Looks like there isn't any pending submission, you're good to go :+1: ")
             return
 
+        for message in paginate(output):
+            msg_to_send = ''.join(message)
+            await ctx.send(msg_to_send)
 
     @commands.command(name='valid', help='Validate a pending submission with the number of the pending score (the number seen on `!listpending`). Exple : `!valid 1`')
     @commands.has_any_role(*ROLE_ADMIN)
@@ -79,55 +61,18 @@ class Moderators(commands.Cog):
             await ctx.send("Please, indicate the id of the pending score to validate (shown with `!listpending`). For example : `!valid 23`")
             return
 
-        pendings = list(get_pending_submissions())
-        if not pendings:
-            await ctx.send("Looks like there isn't any pending submission right now")
+        output: str = cml.validate_submission(id_pending)
+        if isinstance(output, int):
+            await ctx.send("The submission id should be a number and between 1 and the number of pending submissions you have ;-)")
+            return
+        elif isinstance(output, list):
+            await ctx.send("Looks like there isn't any pending submission")
+            return
+        elif output:
+            await ctx.send(output)
             return
 
-        if id_pending > len(pendings):
-            await ctx.send(f"Please, indicate a pending id between 1 and {len(pendings)}")
-            return
-
-        valid_score: Dict[str, Any] = pendings[id_pending - 1]
-
-        print("Valid score found:", valid_score)
-        del(valid_score['_id'])
-
-        delete_pending_submission(valid_score)
-
-        # Check if a score already exists for this map & player
-        old_score = get_score_by_player_id_map_uuid_diff(valid_score['player_id'], valid_score['map_uuid'], valid_score['difficulty_played'])
-        if old_score:
-            print(old_score)
-            if score < float(old_score['score']):
-                await ctx.send("Looks like the player already has a better score for this map/difficulty")
-                return
-
-        add_score_to_cslboard(valid_score)
-
-        misses: int = int(valid_score['misses'])
-        triggers: int = int(valid_score['triggers'])
-        score: float = float(valid_score['score'])
-        perfects_percent: float = float(valid_score['perfects_percent'])
-
-        if old_score:
-            misses -= int(old_score['misses'])
-            triggers -= int(old_score['triggers'])
-            score -= float(old_score['total_score'])
-            perfects_percent -= float(old_score['perfects_percent'])
-
-        player_id: int = valid_score['player_id']
-        account: Dict[str, Any] = get_account_by_player_id(player_id)
-
-        account['total_misses'] = int(account['total_misses']) + misses
-        account['total_triggers'] = int(account['total_triggers']) + triggers
-        account['total_score'] = float(account['total_score']) + score
-        account['total_perfects_percent'] = float(account['total_perfects_percent']) + perfects_percent
-
-        del(account['_id'])
-        update_multiple_value_on_account_by_player_id(player_id, account)
-
-        output: str = "Score is correctly saved and leaderboards are correctly updated."
+        output = "Score is correctly saved and leaderboards are correctly updated."
         for message in paginate(output):
             msg_to_send = ''.join(message)
             await ctx.send(msg_to_send)
@@ -135,29 +80,21 @@ class Moderators(commands.Cog):
     @commands.command(name='deny', help='Deny a pending submission with the number of the pending score (the number seen on `!listpending`). `!deny pending_number reason`, exple : `!deny 1 "Incorrect map name"`')
     @commands.has_any_role(*ROLE_ADMIN)
     @commands.before_invoke(record_usage)
-    async def deny(self, ctx, id_pending: int = 0, reason: str = ""):
+    async def deny(self, ctx, id_pending: int = -1, reason: str = ""):
 
         if id_pending <= 0:
-            await ctx.send("Please, indicate the id of the pending score to validate (shown with `!listpending`). For example : `!valid 23`")
+            await ctx.send("Please, indicate the id of the pending score to validate (shown with `!listpending`). For example : `!deny 23`")
             return
 
-        pendings = list(get_pending_submissions())
-        if not pendings:
-            await ctx.send("Looks like there isn't any pending submission right now")
+        output: str = cml.cancel_submission_of_player(0, id_pending)
+        if isinstance(output, int):
+            await ctx.send("The submission id should be a number and between 1 and the number of pending submissions you have ;-)")
+            return
+        elif isinstance(output, list):
+            await ctx.send("Looks like there isn't any pending submission")
             return
 
-        if id_pending > len(pendings):
-            await ctx.send(f"Please, indicate a pending id between 1 and {len(pendings)}")
-            return
-
-        denied_score: Dict[str, Any] = pendings[id_pending - 1]
-
-        print("Score to deny found:", denied_score)
-        del(denied_score['_id'])
-
-        delete_pending_submission(denied_score)
-
-        output: str = f"Submission {denied_score} has been denied by {ctx.author} because: {reason}"
+        output: str = f"Submission {output} has been denied by {ctx.author} because: {reason}"
         for message in paginate(output):
             msg_to_send = ''.join(message)
             await ctx.send(msg_to_send)
