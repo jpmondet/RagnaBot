@@ -78,8 +78,8 @@ def get_top_players_on_specific_map(map_name: str, nb_to_show: int) -> str:
             account = dbl.get_account_by_player_id(map_score['player_id'])
             if nb_to_show_temp <= 0:
                 break
-        leaders += f"        {str(rank+1)} - {account['player_name']} - {map_score['score']} ({str(map_score['misses'])} misses, {str(map_score['perfects_percent'])}%, {str(map_score['triggers'])} triggers) \n"
-        nb_to_show_temp -= 1
+            leaders += f"        {str(rank+1)} - {account['player_name']} - {map_score['score']} ({str(map_score['misses'])} misses, {str(map_score['perfects_percent'])}%, {str(map_score['triggers'])} triggers) \n"
+            nb_to_show_temp -= 1
     leaders += "\n"
 
     return leaders, nb_songs_matched
@@ -206,11 +206,21 @@ def get_formatted_maps_by_pattern(pattern: str) -> str:
     
     return output
 
-def cancel_submission_of_player(discord_id: int, id_submission: int) -> str:
+def get_pendings_submissions(discord_id: int = 0) -> str:
+    pendings: List[Dict[str, Any]] = None
 
-    account = dbl.get_account_by_discord_id(discord_id)
+    if discord_id:
+        account = dbl.get_account_by_discord_id(discord_id)
+        pendings = list(dbl.get_pending_submissions_by_player_id(account['player_id']))
+    else:
+        pendings = list(dbl.get_pending_submissions())    
 
-    pendings =  list(dbl.get_pending_submissions_by_player_id(account['player_id']))
+    return pendings
+
+def cancel_submission_of_player(discord_id: int = 0, id_submission: int = 0) -> str:
+
+    pendings = get_pendings_submissions(discord_id)
+
     if not pendings:
         return []
 
@@ -230,13 +240,11 @@ def cancel_submission_of_player(discord_id: int, id_submission: int) -> str:
     return str(psub_to_cancel)
 
 
-def get_pending_subs_player(discord_id: int) -> str:
+def get_pending_subs_player(discord_id: int = 0) -> str:
 
-    account = dbl.get_account_by_discord_id(discord_id)
+    output: str = ""
+    pendings = get_pendings_submissions(discord_id)
 
-    output: str = f"Subs from : {account['discord_name']}\n"
-
-    pendings = list(dbl.get_pending_submissions_by_player_id(account['player_id']))
     if not pendings:
         return []
 
@@ -246,7 +254,7 @@ def get_pending_subs_player(discord_id: int) -> str:
         print(map_submitted)
         account = dbl.get_account_by_player_id(pdetails['player_id'])
         print(account)
-        pdetails_str: str = f"        In-game name: {account['player_name']}" + '\n'
+        pdetails_str: str = f"        In-game name: {account['player_name']}  (Discord user : {account['discord_name']})" + '\n'
         pdetails_str += f"        Map played: {map_submitted['artist']} - "
         pdetails_str += f"{map_submitted['title']} - "
         pdetails_str += f"{map_submitted['ownerUsername']} "
@@ -431,3 +439,56 @@ def handle_player_submission(
         dbl.add_pending_submission(submission)
     except AttributeError as ae:
         raise AttributeError(str(ae))
+
+
+def validate_submission(id_pending: int = 0):
+    pendings = get_pendings_submissions()
+    if not pendings:
+        return []
+
+    try:
+        try_d = int(id_pending)
+        if try_d > len(pendings):
+            raise ValueError
+    except ValueError:
+        return -1
+
+    valid_score: Dict[str, Any] = pendings[id_pending - 1]
+
+    print("Valid score found:", valid_score)
+    del(valid_score['_id'])
+
+    dbl.delete_pending_submission(valid_score)
+
+    # Check if a score already exists for this map & player
+    old_score = dbl.get_score_by_player_id_map_uuid_diff(valid_score['player_id'], valid_score['map_uuid'], valid_score['difficulty_played'])
+    if old_score:
+        print(old_score)
+        if float(valid_score['score']) < float(old_score['score']):
+            return "Looks like the player already has a better score for this map/difficulty"
+
+    dbl.add_score_to_cslboard(valid_score)
+
+    misses: int = int(valid_score['misses'])
+    triggers: int = int(valid_score['triggers'])
+    score: float = float(valid_score['score'])
+    perfects_percent: float = float(valid_score['perfects_percent'])
+
+    if old_score:
+        misses -= int(old_score['misses'])
+        triggers -= int(old_score['triggers'])
+        score -= float(old_score['total_score'])
+        perfects_percent -= float(old_score['perfects_percent'])
+
+    player_id: int = valid_score['player_id']
+    account: Dict[str, Any] = dbl.get_account_by_player_id(player_id)
+
+    account['total_misses'] = int(account['total_misses']) + misses
+    account['total_triggers'] = int(account['total_triggers']) + triggers
+    account['total_score'] = float(account['total_score']) + score
+    account['total_perfects_percent'] = float(account['total_perfects_percent']) + perfects_percent
+
+    del(account['_id'])
+    dbl.update_multiple_value_on_account_by_player_id(player_id, account)
+
+    return None
