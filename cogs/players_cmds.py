@@ -5,8 +5,6 @@ from discord.ext import commands
 import compute.middle_layer as cml
 from utils.bot_utils import paginate, record_usage, check_if_registered
 
-#TODO: utils func to check parameter entered by players (especially on submissions)
-
 class Players(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -239,12 +237,6 @@ For example : `!cancelsub 2`')
             return
         elif isinstance(output, list):
             await ctx.send("Looks like there isn't any pending submission for your account")
-            return
-
-        #else it's a string:
-        if not output:
-            await ctx.send('Player not registered. Please use `!register "YOUR_INGAME_NAME"` (yeah, with **quotes** ^^) to register.\n \
-    Exple : `!register "OMDN | Gneuh [knee-uh]"`')
             return
 
         await ctx.send(f"The submission `{output}` is now cancelled")
