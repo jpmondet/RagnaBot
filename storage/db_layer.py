@@ -132,7 +132,7 @@ def prep_db_if_not_exist():
                 pdetails = player_name_id[player_name]
                 acc_updated.append(
                         {'discord_id': discord_id, 
-                            'player_id': pdetails['id'], 'player_name': player_name, 'total_misses': pdetails['total_misses'], 'total_perfects_percent': pdetails['perfects_percent_avg'], 'total_score': pdetails['total_score'], 'total_triggers': pdetails['total_triggers']})
+                            'player_id': pdetails['id'], 'player_name': player_name, 'total_misses': 0, 'total_perfects_percent': 0.0, 'total_score': 0.0, 'total_triggers': 0})
             ACCOUNTS_COLLECTION.insert_many(acc_updated)
 
     # Now that we have migrated all data, we suppress redondant datas that are still in leaderboards collection
