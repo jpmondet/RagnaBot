@@ -6,12 +6,14 @@ that can be (and should be) abstracted """
 from re import compile as rcompile, IGNORECASE as rIGNORECASE
 from typing import List, Dict, Any
 from os import access, R_OK
+from time import sleep
 from json import load as jload
 from json.decoder import JSONDecodeError
 
 from pymongo import MongoClient, ASCENDING as MDBASCENDING
 from pymongo.errors import BulkWriteError, DuplicateKeyError as MDDPK
 from requests import get as rget
+import requests.exceptions
 
 from utils.env import DB_STRING, RAGNASONG_MAPS, RAGNASONG_URL
 
@@ -28,7 +30,7 @@ PLAYERS_DETAILS: str = "players.json"
 PENDING_SCORES: str = "pending_scores.json"
 ACCOUNTS: str = "id_accounts_list.json"
 
-def safe_load_json_file(filename: str):
+def _safe_load_json_file(filename: str):
     if not access(filename, R_OK):
         return None
 
@@ -40,6 +42,31 @@ def safe_load_json_file(filename: str):
         return None
 
     return datas
+    
+class NetworkError(RuntimeError):
+    pass
+
+def _retryer(max_retries=10, timeout=5):
+    def wraps(func):
+        request_exceptions = (
+            requests.exceptions.Timeout,
+            requests.exceptions.ConnectionError,
+            requests.exceptions.HTTPError,
+            requests.exceptions.SSLError,
+        )
+        def inner(*args, **kwargs):
+            for i in range(max_retries):
+                try:    
+                    result = func(*args, **kwargs)
+                except request_exceptions:
+                    sleep(timeout * i)
+                    continue
+                else:
+                    return result
+            else:
+                raise NetworkError 
+        return inner
+    return wraps
 
 
 def prep_db_if_not_exist():
@@ -59,7 +86,7 @@ def prep_db_if_not_exist():
 
     print("Preping db with flat files since at least one collection is empty")
 
-    pendings = safe_load_json_file(PENDING_SCORES)
+    pendings = _safe_load_json_file(PENDING_SCORES)
     if pendings:
         PENDING_SCORES_COLLECTION.insert_many(pendings)
 
@@ -79,13 +106,7 @@ def prep_db_if_not_exist():
         # Ragnasong website
     
         # First we get all the maps on the website
-        start_count: int = 0
-        resp: Dict[str, Any] = rget(RAGNASONG_MAPS.format(start_count)).json()
-        nb_resp: int = len(resp["results"])
-        rs_maps: List[Dict[str, Any]] = resp["results"]
-        for start_count in range(nb_resp,resp["count"] + 1,nb_resp):
-            resp = rget(RAGNASONG_MAPS.format(start_count)).json()
-            rs_maps.extend(resp["results"])
+        rs_maps: List[Dict[str, Any]] = get_all_maps_from_api()
         # We add them to our db since this is the new source of truth
         try:
             CUSTOM_SONGS_COLLECTION.insert_many(rs_maps)
@@ -96,7 +117,7 @@ def prep_db_if_not_exist():
                 print(bwe)
                 return
 
-        csongs = safe_load_json_file(CUSTOM_SONGS)
+        csongs = _safe_load_json_file(CUSTOM_SONGS)
 
         if csongs:
             # We try to get the old leaderboards to map them to the new source of truth is possible
@@ -115,8 +136,8 @@ def prep_db_if_not_exist():
                         LBOARDS_COLLECTION.insert_one(lb_to_add)
 
     if not list(ACCOUNTS_COLLECTION.find()):
-        acc = safe_load_json_file(ACCOUNTS)
-        players_details = safe_load_json_file(PLAYERS_DETAILS)
+        acc = _safe_load_json_file(ACCOUNTS)
+        players_details = _safe_load_json_file(PLAYERS_DETAILS)
 
         if acc and players_details:
             player_name_id = {}
@@ -206,6 +227,42 @@ def get_score_by_player_id_map_uuid_diff(player_id: int, map_uuid: str, difficul
 def get_map_by_uuid(uuid: str) -> Dict[str, Any]:
     return CUSTOM_SONGS_COLLECTION.find_one({'uuid': uuid})
 
+@_retryer()
+def get_from_api(url: str) -> Dict[str, Any]:
+    try:
+        return rget(url).json()
+    except JSONDecodeError:
+        return {}
+
+def get_all_maps_from_api() -> List[Dict[str, Any]]:
+    try:
+        start_count: int = 0
+        resp: Dict[str, Any] = get_from_api(RAGNASONG_MAPS.format(start_count))
+        nb_resp: int = len(resp["results"])
+        rs_maps: List[Dict[str, Any]] = resp["results"]
+        for start_count in range(nb_resp,resp["count"] + 1,nb_resp):
+            resp = get_from_api(RAGNASONG_MAPS.format(start_count))
+            rs_maps.extend(resp["results"])
+        return rs_maps
+    except NetworkError:
+        return []
+
+def get_new_maps_from_api() -> List[Dict[str, Any]]:
+    current_maps = CUSTOM_SONGS_COLLECTION.find({})
+    rs_maps = get_all_maps_from_api()
+
+    current_maps_uuids = { dcm['uuid']: dcm for dcm in current_maps }
+    rs_maps_uuids =  { dcm['uuid']: dcm for dcm in rs_maps }
+
+    uuids_to_add = set(rs_maps_uuids.keys()).difference(set(current_maps_uuids.keys()))
+    print(uuids_to_add)
+
+    maps_to_add = [ rs_maps_uuids[uuid] for uuid in uuids_to_add ] 
+    print(maps_to_add)
+
+    return maps_to_add
+
+
 def search_account_by_name(player_name: str):
     return ACCOUNTS_COLLECTION.find({ 'player_name': rcompile(player_name, rIGNORECASE)})
 
@@ -238,6 +295,12 @@ def add_pending_submission(submission: Dict[str, Any]) -> None:
 
 def add_score_to_cslboard(submission: Dict[str, Any]) -> None:
     LBOARDS_COLLECTION.insert_one(submission)
+
+def add_map_to_custom_songs(map_to_add: Dict[str, Any]) -> None:
+    CUSTOM_SONGS_COLLECTION.insert_one(map_to_add)
+
+def add_multiple_maps_to_custom_songs(maps_to_add: List[Dict[str, Any]]) -> None:
+    CUSTOM_SONGS_COLLECTION.insert_many(maps_to_add)
 
 def update_collection(mongodb_collection, mongo_cmd, match_query, replace_query) -> None:
     mongodb_collection.update_many(match_query, {mongo_cmd: replace_query})
