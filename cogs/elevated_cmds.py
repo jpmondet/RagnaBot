@@ -99,6 +99,15 @@ class Moderators(commands.Cog):
             msg_to_send = ''.join(message)
             await ctx.send(msg_to_send)
 
+    @commands.command(name='force-update-maps', help='Polls the Ragnasong.com API to update maps list') 
+    @commands.has_any_role(*ROLE_ADMIN)
+    @commands.before_invoke(record_usage)
+    async def force_update_maps(self, ctx):
+        maps_added: str = cml.force_update_maps()
+        for message in paginate(maps_added):
+            msg_to_send = ''.join(message)
+            await ctx.send(msg_to_send)
+
 
 def setup(bot):
     bot.add_cog(Moderators(bot))
