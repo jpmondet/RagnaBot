@@ -495,3 +495,16 @@ def validate_submission(id_pending: int = 0):
     dbl.update_multiple_value_on_account_by_player_id(player_id, account)
 
     return None
+
+
+def force_update_maps() -> str:
+
+    output: str = ""
+
+    maps_to_add: List[Dict[str,Any]] = dbl.get_new_maps_from_api()
+
+    if maps_to_add:
+        output = f"Added : {str(len(maps_to_add))} maps from Ragnasong.com\n"
+        dbl.add_multiple_maps_to_custom_songs(maps_to_add)
+
+    return output
