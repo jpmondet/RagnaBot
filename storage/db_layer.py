@@ -92,7 +92,7 @@ def prep_db_if_not_exist():
 
     # We ensure that songs_id, leaderboard_ids and playerds_ids are unique : 
     # (this is a mongodb feature)
-    CUSTOM_SONGS_COLLECTION.create_index([('id', MDBASCENDING)], unique=True)
+    CUSTOM_SONGS_COLLECTION.create_index([('uuid', MDBASCENDING)], unique=True)
     ACCOUNTS_COLLECTION.create_index([('discord_id', MDBASCENDING)], unique=True)
     INDEX_SEQUENCE.create_index([('id', MDBASCENDING)], unique=True)
 
