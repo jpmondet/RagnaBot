@@ -11,3 +11,9 @@ services:
     ports:
     - 27017:27017
     restart: unless-stopped
+  redis_cache:
+    image: "redis:6.0.10-buster"
+    container_name: redis_cache
+    ports:
+    - 6379:6379
+    restart: unless-stopped
