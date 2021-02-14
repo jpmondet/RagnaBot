@@ -9,15 +9,18 @@ from os import access, R_OK
 from time import sleep
 from json import load as jload
 from json.decoder import JSONDecodeError
+from bson.json_util import dumps as bdumps, loads as bloads
 
 from pymongo import MongoClient, ASCENDING as MDBASCENDING
 from pymongo.errors import BulkWriteError, DuplicateKeyError as MDDPK
+from redis import StrictRedis
 from requests import get as rget
 import requests.exceptions
 
 from utils.env import DB_STRING, RAGNASONG_MAPS, RAGNASONG_URL
 
 DB_CLIENT = MongoClient(DB_STRING)
+CACHE_CLIENT = StrictRedis(host="127.0.0.1", port=6379, db=0, charset="utf-8",decode_responses=True)
 DB = DB_CLIENT.ragnabot
 CUSTOM_SONGS_COLLECTION = DB.csongs
 LBOARDS_COLLECTION = DB.cslboards
@@ -74,13 +77,13 @@ def prep_db_if_not_exist():
     iterations. """
     
     if (
-        list(CUSTOM_SONGS_COLLECTION.find())
-        and list(LBOARDS_COLLECTION.find())
-        and list(ACCOUNTS_COLLECTION.find())
-        and list(PENDING_SCORES_COLLECTION.find())
+        get_entire_collection(CUSTOM_SONGS_COLLECTION)
+        and get_entire_collection(LBOARDS_COLLECTION)
+        and get_entire_collection(ACCOUNTS_COLLECTION)
+        and get_entire_collection(PENDING_SCORES_COLLECTION)
     ):
-        # Looks like everything is already migrated
-        # Leaving :)
+        # Looks like everything is already migrated and ready
+        # Caching those answer and leaving :)
         return
 
 
@@ -96,11 +99,11 @@ def prep_db_if_not_exist():
     ACCOUNTS_COLLECTION.create_index([('discord_id', MDBASCENDING)], unique=True)
     INDEX_SEQUENCE.create_index([('id', MDBASCENDING)], unique=True)
 
-    if not list(INDEX_SEQUENCE.find()):
+    if not get_entire_collection(INDEX_SEQUENCE):
         INDEX_SEQUENCE.insert_one({'id': 0})
     # Leaderboards are lil' more specific since they were stored in customs
     # Thus we have to do more processing here to extract lboards
-    if not list(LBOARDS_COLLECTION.find()) or not list(CUSTOM_SONGS_COLLECTION.find()):
+    if not get_entire_collection(LBOARDS_COLLECTION) or not get_entire_collection(CUSTOM_SONGS_COLLECTION):
 
         # We leverage this migration to use data from 
         # Ragnasong website
@@ -135,7 +138,7 @@ def prep_db_if_not_exist():
                         lb_to_add['map_uuid'] = rsmap['uuid']
                         LBOARDS_COLLECTION.insert_one(lb_to_add)
 
-    if not list(ACCOUNTS_COLLECTION.find()):
+    if not get_entire_collection(ACCOUNTS_COLLECTION):
         acc = _safe_load_json_file(ACCOUNTS)
         players_details = _safe_load_json_file(PLAYERS_DETAILS)
 
@@ -182,10 +185,26 @@ def prep_db_if_not_exist():
         del(account['_id'])
         update_multiple_value_on_account_by_player_id(account['player_id'],  account)
 
+def set_in_cache(key, value):
+    CACHE_CLIENT.set(key, value)
 
+def get_from_cache(query):
+    entries = CACHE_CLIENT.get(query)
+    if entries:
+        print(f"Cache hit! ({query})")
+        entries = bloads(entries)
+    return entries
 
 def get_entire_collection(mongodb_collection) -> List[Dict[str, Any]]:
-    return mongodb_collection.find({})
+    entries: List[Dict, Any] = None
+    if mongodb_collection:
+        entries = get_from_cache(mongodb_collection.name)
+    if not entries:
+        entries =  list(mongodb_collection.find({}))
+        if entries:
+            print(f"Setting in cache ! ({mongodb_collection.name})")
+            set_in_cache(mongodb_collection.name, bdumps(entries))
+    return entries
 
 def get_nb_documents(mongodb_collection) -> int:
     return mongodb_collection.count_documents({})
@@ -202,7 +221,7 @@ def get_account_by_player_id(player_id: int) -> Dict[str, Any]:
     return ACCOUNTS_COLLECTION.find_one({'player_id': player_id})
 
 def get_accounts() -> List[Dict[str, Any]]:
-    return ACCOUNTS_COLLECTION.find({})
+    return get_entire_collection(ACCOUNTS_COLLECTION)
 
 def get_pending_submissions() -> List[Dict[str, Any]]:
     return PENDING_SCORES_COLLECTION.find({})
