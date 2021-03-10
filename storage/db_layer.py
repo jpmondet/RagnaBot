@@ -196,15 +196,15 @@ def get_from_cache(query):
     return entries
 
 def get_entire_collection(mongodb_collection) -> List[Dict[str, Any]]:
-    entries: List[Dict, Any] = None
-    if mongodb_collection:
-        entries = get_from_cache(mongodb_collection.name)
-    if not entries:
-        entries =  list(mongodb_collection.find({}))
-        if entries:
-            print(f"Setting in cache ! ({mongodb_collection.name})")
-            set_in_cache(mongodb_collection.name, bdumps(entries))
-    return entries
+    #entries: List[Dict, Any] = None
+    #if mongodb_collection:
+    #    entries = get_from_cache(mongodb_collection.name)
+    #if not entries:
+    #    entries =  list(mongodb_collection.find({}))
+    #    if entries:
+    #        print(f"Setting in cache ! ({mongodb_collection.name})")
+    #        set_in_cache(mongodb_collection.name, bdumps(entries))
+    return list(mongodb_collection.find({}))
 
 def get_nb_documents(mongodb_collection) -> int:
     return mongodb_collection.count_documents({})
