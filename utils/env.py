@@ -15,3 +15,5 @@ CMD_PREFIX: str = getenv("RAGNABOT_CMD_PREFIX")
 DB_STRING: str = getenv("RAGNABOT_DB")
 RAGNASONG_URL: str = "https://ragnasong.com/api/"
 RAGNASONG_MAPS: str = RAGNASONG_URL + "/searchMap/?start={}&dificulty="
+API_USER: str = getenv("API_USER")
+API_PASS: str = getenv("API_PASS")
