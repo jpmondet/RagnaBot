@@ -4,7 +4,7 @@ on what users asked for on discord (via cogs) """
 
 #! /usr/bin/env python3
 
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Union
 
 import storage.db_layer as dbl
 
@@ -21,11 +21,12 @@ def check_backend() -> bool:
     return True
 
 
-def get_top_players(nb_to_show: int) -> str:
+def get_top_players(nb_to_show: int, format=True) -> Union[str, List]:
 
     accounts: List[Dict[str, Any]] = list(dbl.get_accounts())
     
     top_players: str = "\n"
+    top_players_list: List[Dict[str, Any]] = []
     
     if len(accounts) <= nb_to_show:
         nb_to_show = len(accounts)
@@ -33,6 +34,7 @@ def get_top_players(nb_to_show: int) -> str:
     print("Nb players to show:", nb_to_show)
     
     sorted_accs = sorted(accounts, key=lambda k: float(k['total_score']), reverse=True)
+
     
     for rank, account in enumerate(sorted_accs):
         if nb_to_show <= 0:
@@ -43,24 +45,28 @@ def get_top_players(nb_to_show: int) -> str:
         if not nb_player_scores:
             nb_player_scores = 1
         perfects_percent_avg: float = account['total_perfects_percent'] / nb_player_scores
+        top_players_list.append({ "rank": f"{str(rank+1)}", "player_name": f"{account['player_name']}", "total_score": f"{account['total_score']:.2f}", "total_misses": f"{str(account['total_misses'])}", "perfects_percent_avg": f"{str(perfects_percent_avg)}%", "total_triggers": f"{str(account['total_triggers'])}", "nb_songs_played": f"{str(nb_songs_played)}"})
         top_players += f"{str(rank+1)} - {account['player_name']} : {account['total_score']:.2f} ({str(account['total_misses'])} misses, {str(perfects_percent_avg)}%, {str(account['total_triggers'])} triggers on {str(nb_songs_played)} maps played) \n"
         nb_to_show -= 1
 
+    if not format:
+        return top_players_list
     return top_players
 
-def get_top_players_on_specific_map(map_name: str, nb_to_show: int) -> str:
+def get_top_players_on_specific_map(map_name: str, nb_to_show: int, format=True) -> Union[str, List]:
+
+    if not map_name:
+        return 'Please, specify at least a word (will try to find corresponding maps loosely) or an uuid :-) '
 
     matching_songs = list(dbl.search_map_by_pattern(map_name))
 
     leaders: str = ""
+    leaders_dict: Dict[List[Dict[str, Any]]] = {}
 
     if not matching_songs:
-        return "", 0
+        return 'Sorry, no maps were found with this pattern'
 
-    nb_songs_matched = len(matching_songs)
-
-    #if nb_songs_matched > 1:
-        #We found more than 1 maps with this pattern, showing only the first
+    #If there is more than 1 maps with this pattern, showing only the first
     matching_song: Dict[str, Any] = matching_songs[0]
 
     nb_to_show_temp: int = 0
@@ -73,6 +79,7 @@ def get_top_players_on_specific_map(map_name: str, nb_to_show: int) -> str:
         map_scores = sorted(map_scores_unsorted, key=lambda k: k['score'], reverse=True)
 
         leaders += f"{song_name} - Level {difficulty}: \n"
+        leaders_dict[f"{song_name} - Level {difficulty}"] = []
         if len(map_scores) <= nb_to_show:
             nb_to_show_temp = len(map_scores)
         for rank, map_score in enumerate(map_scores):
@@ -80,17 +87,25 @@ def get_top_players_on_specific_map(map_name: str, nb_to_show: int) -> str:
             if nb_to_show_temp <= 0:
                 break
             leaders += f"        {str(rank+1)} - {account['player_name']} - {map_score['score']} ({str(map_score['misses'])} misses, {str(map_score['perfects_percent'])}%, {str(map_score['triggers'])} triggers) \n"
+            leaders_dict[f"{song_name} - Level {difficulty}"].append({"rank": f"{str(rank+1)}", "player_name": f"{account['player_name']}", "score": f"{map_score['score']}", "misses": f"{str(map_score['misses'])}", "perfects_percent": f"{str(map_score['perfects_percent'])}%", "triggers": f"{str(map_score['triggers'])}"})
             nb_to_show_temp -= 1
     leaders += "\n"
 
-    return leaders, nb_songs_matched
+    if not format:
+        return leaders_dict
+    return leaders
 
 
 def registering_player(discord_id: int, discord_name: str, player_name: str) -> str:
 
+    if not player_name:
+        return 'Please indicate your in-game name. Exple : `!register "OMDN | Gneuh [knee-uh]"` (yeah, use quote if there are spaces & stuff !)'
+
     account = dbl.get_account_by_discord_id(discord_id)
     if account:
-        return account['player_name']
+        return f"Uh? Looks like you're already registered as `{account['player_name']}`\n \
+    If you wanna rename yourself, please use `!rename Your-new-in-game-name.` \n \
+    If you wanna unregister, please use `!unregister YEAHIMSURE!` (but your scores will be deleted as well, be careful ! ^^)"
 
     # We get the next player_id available
     id_player = dbl.get_last_index_from_index_sequence()
@@ -109,14 +124,17 @@ def registering_player(discord_id: int, discord_name: str, player_name: str) -> 
 
     dbl.add_account(account)
 
-    return ""
+    return "Ok, you're correctly registered :slight_smile:"
 
-def unregistering_player(discord_id: int) -> str:
+def unregistering_player(discord_id: int, discord_name: str, confirm: str) -> str:
+
+    if confirm != "YEAHIMSURE!":
+        return f"{discord_name} didn't confirm, cancelling (send `!unregister YEAHIMSURE!` to confirm)"
 
     account = dbl.get_account_by_discord_id(discord_id)
     print(discord_id, account)
     if not account:
-        return ""
+        return "Hmm, looks like there was an issue unregistering :thinking:"
 
     player_name: str = account['player_name']
     print(f"Performing unregister of {discord_id}'s account: {player_name}")
@@ -124,14 +142,19 @@ def unregistering_player(discord_id: int) -> str:
     dbl.delete_scores_on_lboard_by_player_id(account['player_id'])
     dbl.delete_account(account['player_id'])
 
-    return player_name
+    return f"Byee, no more scores from {player_name} :'("
 
 def rename_player(discord_id: int, new_name: str) -> str:
+    
+    if not new_name:
+        return f'Please specify the new name (with quotes if there are spaces). \n \
+    Exple: `!rename "Awesome New Name"`'
+
     account = dbl.get_account_by_discord_id(discord_id)
     
     print(discord_id, account)
     if not account:
-        return ""
+        return "Hmm, looks like this discord user doesn't have an account"
 
     player_name: str = account['player_name']
     print(f"Renaming {discord_id}'s account: {player_name} to {new_name}")
@@ -139,17 +162,28 @@ def rename_player(discord_id: int, new_name: str) -> str:
     player_id = account['player_id']
     dbl.update_account_by_player_id(player_id, 'player_name', new_name)
 
-
-    return player_name
+    return f"Byee {player_name} and welcome {new_name} :-)"
 
 
 def search_accounts_by_pattern(player_name: str) -> Dict[str, Any]:
     return list(dbl.search_account_by_name(player_name))
 
-def search_players_names_by_name_pattern(pattern: str) -> str:
-    return "\n".join((account['player_name'] for account in search_accounts_by_pattern(pattern)))
 
-def get_player_stats(discord_id: int = 0, player_name: str = "") -> str:
+def search_players_names_by_name_pattern(pattern: str, format=True) -> str:
+    if not pattern:
+        return "Please specify a word to find. For exemple !searchplayer gneuh should find the player with \n \
+this word in the name"
+
+    accounts = search_accounts_by_pattern(pattern)
+    if not accounts:
+        return "No player found with that pattern, sorry"
+    
+    if format:
+        return "\n".join((account['player_name'] for account in accounts))
+    
+    return [account['player_name'] for account in accounts]
+
+def get_player_stats(discord_id: int = 0, player_name: str = "", format=True) -> Union[str, Dict]:
 
     account: Dict[str, Any] = None
     if not player_name:
@@ -157,14 +191,14 @@ def get_player_stats(discord_id: int = 0, player_name: str = "") -> str:
         account = dbl.get_account_by_discord_id(discord_id)
         if not account:
             print(f"No account registered for the discord id {discord_id}")
-            return ""
+            return f"No account registered for the discord id {discord_id}"
         print(f"Ok, the author is registered as {account['player_name']}")
     else:
         # We search for the player passed in param
         accounts = list(dbl.search_account_by_name(player_name))
         if not accounts:
             print("No player found with that pattern")
-            return ""
+            return "No player found with that name pattern"
         if len(accounts) > 1:
             print('The request found more than 1 player. Showing the first one')
         account = accounts[0]
@@ -173,11 +207,15 @@ def get_player_stats(discord_id: int = 0, player_name: str = "") -> str:
     if not nb_player_scores:
         nb_player_scores = 1
 
+    nb_songs_played: int = nb_player_scores
+    perfects_percent_avg: float = account['total_perfects_percent'] / nb_player_scores
+
+    if not format:
+        return { "player_name": f"{account['player_name']}", "total_score": f"{account['total_score']:.2f}", "total_misses": f"{str(account['total_misses'])}", "perfects_percent_avg": f"{str(perfects_percent_avg)}%", "total_triggers": f"{str(account['total_triggers'])}", "nb_songs_played": f"{str(nb_songs_played)}"}
+
     pstats_str: str = ""
     total_score: float = account['total_score']
     total_misses: int = account['total_misses']
-    nb_songs_played: int = nb_player_scores
-    perfects_percent_avg: float = account['total_perfects_percent'] / nb_player_scores
     total_triggers: int = account['total_triggers']
     pstats_str =  f"{account['player_name']}\n\t \
 Total score: {total_score:.2f},\n\t \
@@ -186,7 +224,6 @@ Total triggers: {total_triggers},\n\t \
 Perfects percent average: {perfects_percent_avg:.2f},\n\t \
 On {nb_songs_played} maps played"
     print(pstats_str)
-
     return pstats_str
 
 
@@ -220,7 +257,7 @@ def get_pendings_submissions(discord_id: int = 0) -> str:
 
     return pendings
 
-def cancel_submission_of_player(discord_id: int = 0, id_submission: int = 0) -> str:
+def cancel_submission_of_player(discord_id: int = 0, id_submission: int = 0, api_call=False) -> str:
 
     pendings = get_pendings_submissions(discord_id)
 
@@ -234,7 +271,10 @@ def cancel_submission_of_player(discord_id: int = 0, id_submission: int = 0) -> 
     except ValueError:
         return -1
 
-    psub_to_cancel = pendings[id_submission - 1]
+    if not api_call:
+        id_submission = id_submission - 1
+
+    psub_to_cancel = pendings[id_submission]
     del(psub_to_cancel['_id'])
 
     print("Sub to cancel", psub_to_cancel)
@@ -440,23 +480,32 @@ def handle_player_submission(
         submission['proof'] = proof
 
         dbl.add_pending_submission(submission)
+
+        return "Your request is correctly submitted. Please wait for an admin to verify your submission"
     except AttributeError as ae:
-        raise AttributeError(str(ae))
+        return str(ae)
 
 
-def validate_submission(id_pending: int = 0):
+def validate_submission(id_pending: int = 0, api_call=False):
+
+    if id_pending <= 0:
+        return "Please, indicate the id of the pending score to validate (shown with `!listpending`). For example : `!valid 23`"
+
     pendings = get_pendings_submissions()
     if not pendings:
-        return []
+        return "Looks like there isn't any pending submission"
 
     try:
         try_d = int(id_pending)
         if try_d > len(pendings):
             raise ValueError
     except ValueError:
-        return -1
+        return "The submission id should be a number and between 1 and the number of pending submissions you have ;-)"
 
-    valid_score: Dict[str, Any] = pendings[id_pending - 1]
+    if not api_call:
+        id_pending = id_pending - 1
+
+    valid_score: Dict[str, Any] = pendings[id_pending]
 
     print("Valid score found:", valid_score)
     del(valid_score['_id'])
@@ -494,7 +543,7 @@ def validate_submission(id_pending: int = 0):
     del(account['_id'])
     dbl.update_multiple_value_on_account_by_player_id(player_id, account)
 
-    return None
+    return "Score is correctly saved and leaderboards are correctly updated."
 
 
 def force_update_maps() -> str:
