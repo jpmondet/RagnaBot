@@ -5,6 +5,7 @@ on what users asked for on discord (via cogs) """
 #! /usr/bin/env python3
 
 from typing import List, Dict, Any, Union
+from collections import defaultdict
 
 import storage.db_layer as dbl
 
@@ -61,7 +62,7 @@ def get_top_players_on_specific_map(map_name: str, nb_to_show: int, format=True)
     matching_songs = list(dbl.search_map_by_pattern(map_name))
 
     leaders: str = ""
-    leaders_dict: Dict[List[Dict[str, Any]]] = {}
+    leaders_dict: Dict[List[Dict[str, Any]]] = defaultdict(list)
 
     if not matching_songs:
         return 'Sorry, no maps were found with this pattern'
@@ -79,7 +80,6 @@ def get_top_players_on_specific_map(map_name: str, nb_to_show: int, format=True)
         map_scores = sorted(map_scores_unsorted, key=lambda k: k['score'], reverse=True)
 
         leaders += f"{song_name} - Level {difficulty}: \n"
-        leaders_dict[f"{song_name} - Level {difficulty}"] = []
         if len(map_scores) <= nb_to_show:
             nb_to_show_temp = len(map_scores)
         for rank, map_score in enumerate(map_scores):
@@ -264,15 +264,18 @@ def cancel_submission_of_player(discord_id: int = 0, id_submission: int = 0, api
     if not pendings:
         return []
 
-    try:
-        try_d = int(id_submission)
-        if try_d > len(pendings):
-            raise ValueError
-    except ValueError:
-        return -1
-
     if not api_call:
         id_submission = id_submission - 1
+
+    try:
+        try_d = int(id_submission)
+        if try_d >= len(pendings):
+            raise ValueError
+    except ValueError:
+        if not api_call:
+            return -1
+        return "Submission id should be an int and not greater than the number of subs - 1"
+
 
     psub_to_cancel = pendings[id_submission]
     del(psub_to_cancel['_id'])
@@ -283,13 +286,17 @@ def cancel_submission_of_player(discord_id: int = 0, id_submission: int = 0, api
     return str(psub_to_cancel)
 
 
-def get_pending_subs_player(discord_id: int = 0) -> str:
+def get_pending_subs_player(discord_id: int = 0, format=True) -> Union[str, Dict[int, Dict[str, Any]]]:
 
-    output: str = ""
     pendings = get_pendings_submissions(discord_id)
 
     if not pendings:
         return []
+
+    if format:
+        output: str = ""
+    else:
+        output: List[Dict[int, Dict[str, Any]]] = defaultdict(list)
 
     for id_req, pdetails in enumerate(pendings):
         print(id_req, pdetails)
@@ -297,18 +304,34 @@ def get_pending_subs_player(discord_id: int = 0) -> str:
         print(map_submitted)
         account = dbl.get_account_by_player_id(pdetails['player_id'])
         print(account)
-        pdetails_str: str = f"        In-game name: {account['player_name']}  (Discord user : {account['discord_name']})" + '\n'
-        pdetails_str += f"        Map played: {map_submitted['artist']} - "
-        pdetails_str += f"{map_submitted['title']} - "
-        pdetails_str += f"{map_submitted['ownerUsername']} "
-        pdetails_str += f"(map uuid: {map_submitted['uuid']})" + '\n'
-        pdetails_str += f"        score: {pdetails['score']} - "
-        pdetails_str += f"misses: {pdetails['misses']} - "
-        pdetails_str += f"perfects_percent: {pdetails['perfects_percent']} - "
-        pdetails_str += f"triggers: {pdetails['triggers']}" + "\n"
-        pdetails_str += f"        proof: {pdetails['proof']}" + "\n"
-        print(pdetails_str)
-        output = f"{id_req + 1} :\n{pdetails_str}\n"
+        if format:
+            pdetails_str: str = f"        In-game name: {account['player_name']}  (Discord user : {account['discord_name']})" + '\n'
+            pdetails_str += f"        Map played: {map_submitted['artist']} - "
+            pdetails_str += f"{map_submitted['title']} - "
+            pdetails_str += f"{map_submitted['ownerUsername']} "
+            pdetails_str += f"(map uuid: {map_submitted['uuid']})" + '\n'
+            pdetails_str += f"        score: {pdetails['score']} - "
+            pdetails_str += f"misses: {pdetails['misses']} - "
+            pdetails_str += f"perfects_percent: {pdetails['perfects_percent']} - "
+            pdetails_str += f"triggers: {pdetails['triggers']}" + "\n"
+            pdetails_str += f"        proof: {pdetails['proof']}" + "\n"
+            print(pdetails_str)
+            output += f"{id_req + 1} :\n{pdetails_str}\n"
+        else:
+            output[id_req].append(
+                {"player_name": f"{account['player_name']}",
+                "discord_name": f"{account['discord_name']}",
+                "score": f"{pdetails['score']}",
+                "misses": f"{pdetails['misses']}",
+                "perfects_percent": f"{pdetails['perfects_percent']}",
+                "triggers": f"{pdetails['triggers']}",
+                "proof": f"{pdetails['proof']}",
+                "map_uuid": f"{map_submitted['uuid']}",
+                "artist": f"{map_submitted['artist']}",
+                "title": f"{map_submitted['title']}",
+                "ownerUsername": f"{map_submitted['ownerUsername']}",
+                }
+            )
 
     return output
 
@@ -486,24 +509,25 @@ def handle_player_submission(
         return str(ae)
 
 
-def validate_submission(id_pending: int = 0, api_call=False):
+def validate_submission(id_pending: int = -1, api_call=False):
 
-    if id_pending <= 0:
+    if id_pending < 0:
         return "Please, indicate the id of the pending score to validate (shown with `!listpending`). For example : `!valid 23`"
 
     pendings = get_pendings_submissions()
     if not pendings:
         return "Looks like there isn't any pending submission"
 
+    if not api_call:
+        id_pending = id_pending - 1
+
     try:
         try_d = int(id_pending)
-        if try_d > len(pendings):
+        if try_d >= len(pendings):
             raise ValueError
     except ValueError:
         return "The submission id should be a number and between 1 and the number of pending submissions you have ;-)"
 
-    if not api_call:
-        id_pending = id_pending - 1
 
     valid_score: Dict[str, Any] = pendings[id_pending]
 
