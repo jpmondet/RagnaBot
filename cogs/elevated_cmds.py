@@ -56,24 +56,7 @@ class Moderators(commands.Cog):
     @commands.has_any_role(*ROLE_ADMIN)
     @commands.before_invoke(record_usage)
     async def valid(self, ctx, id_pending: int = 0):
-
-        if id_pending <= 0:
-            await ctx.send("Please, indicate the id of the pending score to validate (shown with `!listpending`). For example : `!valid 23`")
-            return
-
-        output: str = cml.validate_submission(id_pending)
-        if isinstance(output, int):
-            await ctx.send("The submission id should be a number and between 1 and the number of pending submissions you have ;-)")
-            return
-        elif isinstance(output, list):
-            await ctx.send("Looks like there isn't any pending submission")
-            return
-        elif output:
-            await ctx.send(output)
-            return
-
-        output = "Score is correctly saved and leaderboards are correctly updated."
-        for message in paginate(output):
+        for message in paginate(cml.validate_submission(id_pending)):
             msg_to_send = ''.join(message)
             await ctx.send(msg_to_send)
 
